@@ -35,7 +35,7 @@ class SandboxOptions {
   std::vector<std::string> envs;
   // inside box (relative to boxdir but start with /)
   std::string workdir, input, output, error;
-  int output_fd, error_fd; // -1 for not dup; overrides input/output
+  int input_fd, output_fd, error_fd; // -1 for not dup; overrides input/output
   std::vector<int> cpu_set;
   int uid, gid;
   long wall_time; // us
@@ -43,12 +43,11 @@ class SandboxOptions {
   int proc_num;
   int file_num;
   long fsize; // KiB
-  long workdir_mount_size; // 0 for not mount; KiB
   std::vector<std::string> dirs;
   std::string tmpfs;
 
   SandboxOptions() :
-      output_fd(-1), error_fd(-1),
+      input_fd(-1), output_fd(-1), error_fd(-1),
       uid(65534), gid(65534),
       wall_time(0),
       rss(0), vss(0),
@@ -65,12 +64,16 @@ class SandboxOptions {
 // 2. generate a unique uid&gid (and possibly unique CPU for cpuset)
 // assign uid,gid,cpu_set,boxdir according to 1.2.
 // 3. create workdir & input file and assign proper permission
-//   - for old-style compatility, set workdir to be writable by uid and set `output` & `error` inside workdir
-//     input file should also be writable (old behavior)
-//   - for strict style, open `output` & `error` outside workdir first and use `output_fd` & `error_fd` to direct output
-//     create input ouside workdir and set permission to read-only
-//     workdir should be non-writable if unwilling to let user create files,
-//       or writable and set `workdir_mount_size` to limit the user output size otherwise
+//   - first mount a tmpfs with proper size (output limit) onto workdir
+//   - for old-style compatility, first mount a tmpfs with proper size (output limit) onto workdir,
+//     set workdir to be writable by uid, and set input/output/error file all inside workdir and writable by uid
+//   - for strict style:
+//     - don't mount workdir; make nothing inside jail writable by uid,
+//       pre-open input/output file inside a directory not openable by uid
+//       and set input_fd/output_fd to deliver output (this prevents user from reopening it)
+//       and set error to /dev/null
+//     - if pin is needed, mount a tmpfs with a small size (fits only pin output) onto workdir,
+//       set workdir to be non-writable by uid and pre-create a file writable by uid for pin output
 struct cjail_result SandboxExec(const SandboxOptions&);
 
 #endif  // SANDBOX_H_

@@ -14,7 +14,10 @@ CJailCtxClass SandboxOptions::ToCJailCtx() const {
   CJailCtxClass ret;
   struct cjail_ctx& ctx = ret.ctx_;
   cjail_ctx_init(&ctx);
-  // default: preservefd, sharenet, fd_input, fd_output, fd_error
+  // default: preservefd, sharenet
+  if (fd_input != -1) ctx.fd_input = fd_input;
+  if (fd_output != -1) ctx.fd_output = fd_output;
+  if (fd_error != -1) ctx.fd_error = fd_error;
   if (!input.empty()) ctx.redir_input = input.data();
   if (!output.empty()) ctx.redir_output = output.data();
   if (!error.empty()) ctx.redir_error = error.data();
@@ -48,17 +51,6 @@ CJailCtxClass SandboxOptions::ToCJailCtx() const {
   ctx.lim_time.tv_sec = wall_time / 1'000'000;
   ctx.lim_time.tv_usec = wall_time % 1'000'000;
   // default: seccomp_cfg
-  // workdir mount
-  if (workdir_mount_size > 0) {
-    ret.mnt_buf_.emplace_back();
-    struct jail_mount_ctx& mnt_ctx = ret.mnt_buf_.back();
-    ret.str_buf_.push_back("tmpfs");
-    mnt_ctx.type = mnt_ctx.source = mnt_ctx.fstype = ret.str_buf_.back().data();
-    mnt_ctx.flags = JAIL_MNT_RW;
-    mnt_ctx.target = workdir.data();
-    ret.str_buf_.push_back("size=" + std::to_string(workdir_mount_size) + "k");
-    mnt_list_add(ret.mnt_list_, &mnt_ctx);
-  }
   // bind mounts
   for (auto& i : dirs) {
     ret.mnt_buf_.emplace_back();

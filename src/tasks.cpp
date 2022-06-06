@@ -1,16 +1,21 @@
 #include "tasks.h"
 
 #include <signal.h>
+#include <unistd.h>
+#include <sys/wait.h>
+
 #include <map>
 #include <unordered_map>
 
 namespace {
 
 /// child
+// Invoke sandbox with correct settings
+// Results will be parsed in testsuite.cpp
 // TODO
-struct cjail_result RunCompile(const Submission& sub, int uid) {}
-struct cjail_result RunExecute(const Submission& sub, int uid) {}
-struct cjail_result RunScoring(const Submission& sub, int uid) {}
+struct cjail_result RunCompile(const Submission& sub, const Task& task, int uid) {}
+struct cjail_result RunExecute(const Submission& sub, const Task& task, int uid) {}
+struct cjail_result RunScoring(const Submission& sub, const Task& task, int uid) {}
 
 /// parent
 constexpr int kUidBase = 50000, kUidPoolSize = 100;
@@ -52,7 +57,8 @@ bool Wait() {
 
 } // namespace
 
-int RunTask(const Submission& sub, TaskType task) {
+int RunTask(const Submission& sub, const Task& task) {
+  if (task.type == TaskType::FINALIZE) return -1;
   if (!pool_init) InitPool();
   int pipefd[2];
   if (pipe(pipefd) < 0) return -1;
@@ -68,10 +74,11 @@ int RunTask(const Submission& sub, TaskType task) {
   if (pid == 0) {
     close(pipefd[0]);
     struct cjail_result ret;
-    switch (task) {
-      case TaskType::COMPILE: ret = RunCompile(sub, uid); break;
-      case TaskType::EXECUTE: ret = RunExecute(sub, uid); break;
-      case TaskType::SCORING: ret = RunScoring(sub, uid); break;
+    switch (task.type) {
+      case TaskType::COMPILE: ret = RunCompile(sub, task, uid); break;
+      case TaskType::EXECUTE: ret = RunExecute(sub, task, uid); break;
+      case TaskType::SCORING: ret = RunScoring(sub, task, uid); break;
+      case TaskType::FINALIZE: __builtin_unreachable();
     }
     write(pipefd[1], &ret, sizeof(struct cjail_result));
     exit(0);
