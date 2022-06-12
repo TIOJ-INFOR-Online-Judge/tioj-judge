@@ -35,7 +35,7 @@ class SandboxOptions {
   std::vector<std::string> envs;
   // inside box (relative to boxdir but start with /)
   std::string workdir, input, output, error;
-  int input_fd, output_fd, error_fd; // -1 for not dup; overrides input/output
+  int fd_input, fd_output, fd_error; // -1 for not dup; overrides input/output
   std::vector<int> cpu_set;
   int uid, gid;
   long wall_time; // us
@@ -47,7 +47,7 @@ class SandboxOptions {
   std::string tmpfs;
 
   SandboxOptions() :
-      input_fd(-1), output_fd(-1), error_fd(-1),
+      fd_input(-1), fd_output(-1), fd_error(-1),
       uid(65534), gid(65534),
       wall_time(0),
       rss(0), vss(0),

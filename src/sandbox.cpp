@@ -1,11 +1,6 @@
 #include "sandbox.h"
 
-#include <cstdio>
-#include <cstring>
-#include <cstdlib>
-#include <iomanip>
-#include <iostream>
-#include <sstream>
+#include <unistd.h>
 #include <string>
 
 #include "utils.h"
