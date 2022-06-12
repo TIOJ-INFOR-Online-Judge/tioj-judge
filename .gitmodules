@@ -1,0 +1,6 @@
+[submodule "deps/json"]
+	path = deps/json
+	url = https://github.com/nlohmann/json.git
+[submodule "deps/cjail"]
+	path = deps/cjail
+	url = https://github.com/adrien1018/cjail.git
