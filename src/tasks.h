@@ -2,7 +2,7 @@
 #define TASKS_H_
 
 #include "sandbox.h"
-#include "testsuite.h"
+#include "submission.h"
 
 enum class TaskType {
   COMPILE,
@@ -20,6 +20,7 @@ struct Task {
   TaskType type;
   int subtask;
   // testdata # for EXECUTE & SCORING; (int)CompileSubtask for COMPILE
+  // TODO FEATURE(multistage,link): subsubtask
 };
 
 // We're not sure whether cjail is thread-safe. Thus, we use fork() for every RunTask,

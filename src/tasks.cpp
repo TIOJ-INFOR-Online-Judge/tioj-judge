@@ -1,20 +1,173 @@
 #include "tasks.h"
 
+#include <fcntl.h>
 #include <signal.h>
 #include <unistd.h>
 #include <sys/wait.h>
 #include <map>
 #include <unordered_map>
 
+#include "paths.h"
+#include "utils.h"
+
 namespace {
+
+std::vector<std::string> GccCompileCommand(
+    Compiler lang, const std::string& input, const std::string& output, bool is_static) {
+  std::string prog, std;
+  switch (lang) {
+    case Compiler::GCC_CPP_98: prog = "g++", std = "-std=c++98"; break;
+    case Compiler::GCC_CPP_11: prog = "g++", std = "-std=c++11"; break;
+    case Compiler::GCC_CPP_14: prog = "g++", std = "-std=c++14"; break;
+    case Compiler::GCC_CPP_17: prog = "g++", std = "-std=c++17"; break;
+    case Compiler::GCC_CPP_20: prog = "g++", std = "-std=c++20"; break;
+    case Compiler::GCC_C_90: prog = "gcc", std = "-ansi"; break;
+    case Compiler::GCC_C_98: prog = "gcc", std = "-std=c98"; break;
+    case Compiler::GCC_C_11: prog = "gcc", std = "-std=c11"; break;
+    default: __builtin_unreachable();
+  }
+  std::vector<std::string> ret = {"/usr/bin/env", prog, std, "-O2", "-w"};
+  if (is_static) ret.push_back("-static");
+  ret.insert(ret.end(), {"-o", output, input});
+  if (prog == "gcc") ret.push_back("-lm");
+  return ret;
+}
+
+std::vector<std::string> ExecuteCommand(Compiler lang, const std::string& program) {
+  switch (lang) {
+    case Compiler::GCC_CPP_98: [[fallthrough]];
+    case Compiler::GCC_CPP_11: [[fallthrough]];
+    case Compiler::GCC_CPP_14: [[fallthrough]];
+    case Compiler::GCC_CPP_17: [[fallthrough]];
+    case Compiler::GCC_CPP_20: [[fallthrough]];
+    case Compiler::GCC_C_90: [[fallthrough]];
+    case Compiler::GCC_C_98: [[fallthrough]];
+    case Compiler::GCC_C_11: [[fallthrough]];
+    case Compiler::HASKELL: return {program};
+    case Compiler::PYTHON2: return {"/usr/bin/env", "python2", program};
+    case Compiler::PYTHON3: return {"/usr/bin/env", "python3", program};
+  }
+  __builtin_unreachable();
+}
 
 /// child
 // Invoke sandbox with correct settings
 // Results will be parsed in testsuite.cpp
-// TODO
-struct cjail_result RunCompile(const Submission& sub, const Task& task, int uid) {}
-struct cjail_result RunExecute(const Submission& sub, const Task& task, int uid) {}
-struct cjail_result RunScoring(const Submission& sub, const Task& task, int uid) {}
+struct cjail_result RunCompile(const Submission& sub, const Task& task, int uid) {
+  long id = sub.submission_internal_id;
+  CompileSubtask subtask = (CompileSubtask)task.subtask;
+  Compiler lang;
+  switch (subtask) {
+    case CompileSubtask::USERPROG: lang = sub.lang; break;
+    case CompileSubtask::SPECJUDGE: lang = sub.specjudge_lang; break;
+    default: __builtin_unreachable();
+  }
+  std::string input = CompileBoxInput(-1, subtask, lang, true);
+  std::string output = CompileBoxOutput(-1, subtask, lang, true);
+
+  SandboxOptions opt;
+  opt.boxdir = CompileBoxPath(id, subtask);
+  switch (lang) {
+    case Compiler::GCC_CPP_98: [[fallthrough]];
+    case Compiler::GCC_CPP_11: [[fallthrough]];
+    case Compiler::GCC_CPP_14: [[fallthrough]];
+    case Compiler::GCC_CPP_17: [[fallthrough]];
+    case Compiler::GCC_CPP_20: [[fallthrough]];
+    case Compiler::GCC_C_90: [[fallthrough]];
+    case Compiler::GCC_C_98: [[fallthrough]];
+    case Compiler::GCC_C_11:
+      opt.command = GccCompileCommand(lang, input, output, sub.sandbox_strict); break;
+    case Compiler::HASKELL:
+      // TODO: check if ghc can work statically
+      opt.command = {"/usr/bin/env", "ghc", "-w", "-O", "-tmpdir", ".", "-o", output, input}; break;
+    case Compiler::PYTHON2:
+      opt.command = {"/usr/bin/env", "python2", "-m", "py_compile", input}; break;
+    case Compiler::PYTHON3: {
+      // note: we assume input & output name has no quotes here
+      std::string script = ("import py_compile;py_compile.compile\'\'\'" +
+                            input + "\'\'\',\'\'\'" + output + "\'\'\')");
+      opt.command = {"/usr/bin/env", "python3", "-c", script};
+      break;
+    }
+    default: __builtin_unreachable();
+  }
+  if (char* path = getenv("PATH")) opt.envs.push_back(std::string("PATH=") + path);
+  opt.workdir = Workdir("/");
+  opt.uid = opt.gid = uid;
+  opt.wall_time = 60L * 1'000'000;
+  opt.rss = 2L * 1024 * 1024; // 2G
+  opt.proc_num = 5;
+  opt.fsize = 1L * 1024 * 1024; // 1G
+  opt.dirs = {"/usr", "/lib", "/lib64", "/etc/alternatives", "/bin"};
+  // TODO: check if it works (mount /tmp??)
+  return SandboxExec(opt);
+}
+
+struct cjail_result RunExecute(const Submission& sub, const Task& task, int uid) {
+  long id = sub.submission_internal_id;
+  int subtask = task.subtask;
+  auto& lim = sub.td_limits[subtask];
+  std::string program = ExecuteBoxProgram(-1, -1, sub.lang, true);
+
+  SandboxOptions opt;
+  opt.boxdir = ExecuteBoxPath(id, subtask);
+  opt.command = ExecuteCommand(sub.lang, program);
+  // TODO: check if python env works (python seems does not require PATH now?)
+  opt.workdir = Workdir("/");
+  opt.uid = opt.gid = uid;
+  opt.wall_time = std::max(long(lim.time * 1.2), lim.time + 1'000'000);
+  opt.rss = lim.rss;
+  opt.vss = lim.vss;
+  opt.proc_num = 1;
+  // file limit is not needed since we have already limit the total size by mounting tmpfs
+  opt.fsize = lim.output;
+  if (sub.sandbox_strict) {
+    if (sub.lang == Compiler::PYTHON2 || sub.lang == Compiler::PYTHON3) {
+      // TODO: check if necessary
+      opt.dirs = {"/usr", "/lib", "/lib64", "/etc/alternatives", "/bin"};
+    }
+    // TODO: check haskell
+    opt.fd_input = open(ExecuteBoxInput(id, subtask, sub.sandbox_strict).c_str(), O_RDONLY);
+    opt.fd_output = open(ExecuteBoxOutput(id, subtask, sub.sandbox_strict).c_str(), O_WRONLY, 0600);
+    opt.error = "/dev/null";
+  } else {
+    opt.dirs = {"/usr", "/lib", "/lib64", "/etc/alternatives", "/bin"};
+    opt.input = ExecuteBoxInput(-1, -1, sub.sandbox_strict, true);
+    opt.output = ExecuteBoxOutput(-1, -1, sub.sandbox_strict, true);
+    opt.error = ExecuteBoxError(-1, -1, true);
+  }
+  return SandboxExec(opt);
+  // we don't need to close the opened files because the process is about to terminate
+}
+
+struct cjail_result RunScoring(const Submission& sub, const Task& task, int uid) {
+  long id = sub.submission_internal_id;
+  int subtask = task.subtask;
+  std::string program = ScoringBoxProgram(-1, -1, sub.lang, true);
+
+  SandboxOptions opt;
+  opt.boxdir = ExecuteBoxPath(id, subtask);
+  opt.command = ExecuteCommand(sub.specjudge_lang, program);
+  if (sub.specjudge_type == SpecJudgeType::SPECJUDGE_OLD) {
+    opt.command.insert(opt.command.end(), {
+      ScoringBoxUserOutput(-1, -1, true),
+      ScoringBoxTdInput(-1, -1, true),
+      ScoringBoxTdOutput(-1, -1, true),
+      ScoringBoxCode(-1, -1, sub.lang, true),
+      CompilerName(sub.lang),
+    });
+  } else {
+    opt.command.push_back(ScoringBoxMetaFile(-1, -1, true));
+  }
+  opt.workdir = Workdir("/");
+  opt.uid = opt.gid = uid;
+  opt.wall_time = 60L * 1'000'000;
+  opt.rss = 2L * 1024 * 1024; // 2G
+  opt.proc_num = 5;
+  opt.fsize = 1L * 1024 * 1024; // 1G
+  opt.dirs = {"/usr", "/lib", "/lib64", "/etc/alternatives", "/bin"};
+  return SandboxExec(opt);
+}
 
 /// parent
 constexpr int kUidBase = 50000, kUidPoolSize = 100;
@@ -39,7 +192,7 @@ bool Wait() {
   std::vector<int> to_remove;
   for (auto& i : running) {
     if (!FD_ISSET(i.first, &select_fdset)) continue;
-    struct cjail_result res;
+    struct cjail_result res = {};
     read(i.first, &res, sizeof(struct cjail_result));
     close(i.first);
     waitpid(i.second.first, nullptr, 0);

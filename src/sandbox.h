@@ -44,17 +44,16 @@ class SandboxOptions {
   int file_num;
   long fsize; // KiB
   std::vector<std::string> dirs;
-  std::string tmpfs;
 
   SandboxOptions() :
+      preserve_env(false),
       fd_input(-1), fd_output(-1), fd_error(-1),
       uid(65534), gid(65534),
       wall_time(0),
       rss(0), vss(0),
-      proc_num(1),
+      proc_num(0),
       file_num(0),
       fsize(0) {}
-  ~SandboxOptions();
   // the result is invalidated after reassignment/reallocation of any string/vector member
   CJailCtxClass ToCJailCtx() const;
 };

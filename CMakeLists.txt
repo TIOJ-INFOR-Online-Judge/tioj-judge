@@ -4,6 +4,7 @@ project(tioj_judge VERSION 0.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
+set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
 
 # build submodule dependencies
@@ -19,7 +20,7 @@ if(GIT_FOUND AND EXISTS "${PROJECT_SOURCE_DIR}/.git")
 endif()
 
 if(NOT EXISTS "${PROJECT_SOURCE_DIR}/deps/cjail/CMakeLists.txt")
-    message(FATAL_ERROR "The submodules were not downloaded! GIT_SUBMODULE was turned off or failed. Please update submodules and try again.")
+  message(FATAL_ERROR "The submodules were not downloaded! Please update submodules and try again.")
 endif()
 add_subdirectory("${PROJECT_SOURCE_DIR}/deps/cjail" EXCLUDE_FROM_ALL)
 

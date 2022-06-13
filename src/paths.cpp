@@ -3,8 +3,9 @@
 namespace fs = std::filesystem;
 
 const fs::path kBoxRoot = "/tmp/tioj_box";
-const fs::path kTestdataRoot = "./testdata";
+const fs::path kTestdataRoot = "./testdata"; // TODO FEATURE(config)
 const fs::path kSubmissionRoot = "/tmp/submissions";
+const fs::path kDefaultScoringProgram = "./build/default-scoring"; // TODO FEATURE(config)
 
 const char kWorkdirRelative[] = "workdir";
 fs::path Workdir(fs::path&& path) {
@@ -12,13 +13,15 @@ fs::path Workdir(fs::path&& path) {
   return path;
 }
 
+namespace {
+
 inline std::string PadInt(long x, size_t width) {
   std::string ret = std::to_string(x);
   if (ret.size() < width) ret = std::string(width - ret.size(), '0') + ret;
   return ret;
 }
 
-static inline std::string CodeExtension(Compiler lang) {
+inline std::string CodeExtension(Compiler lang) {
   switch (lang) {
     case Compiler::GCC_CPP_98: [[fallthrough]];
     case Compiler::GCC_CPP_11: [[fallthrough]];
@@ -35,7 +38,7 @@ static inline std::string CodeExtension(Compiler lang) {
   __builtin_unreachable();
 }
 
-static inline std::string ProgramExtension(Compiler lang) {
+inline std::string ProgramExtension(Compiler lang) {
   switch (lang) {
     case Compiler::GCC_CPP_98: [[fallthrough]];
     case Compiler::GCC_CPP_11: [[fallthrough]];
@@ -52,11 +55,6 @@ static inline std::string ProgramExtension(Compiler lang) {
   __builtin_unreachable();
 }
 
-fs::path SubmissionRunPath(long id) {
-  return kBoxRoot / PadInt(id, 6);
-}
-
-
 inline std::string CompileCodeName(CompileSubtask subtask, Compiler lang) {
   std::string extension = CodeExtension(lang);
   switch (subtask) {
@@ -67,6 +65,8 @@ inline std::string CompileCodeName(CompileSubtask subtask, Compiler lang) {
   }
   __builtin_unreachable();
 }
+
+// Because of python2, it needs to be the same name as CompileCodeName
 inline std::string CompileResultName(CompileSubtask subtask, Compiler lang) {
   std::string extension = ProgramExtension(lang);
   switch (subtask) {
@@ -77,27 +77,43 @@ inline std::string CompileResultName(CompileSubtask subtask, Compiler lang) {
   }
   __builtin_unreachable();
 }
+
 inline std::string InterlibName(int problem_id) {
   return "lib" + PadInt(problem_id, 4) + ".h";
+}
+
+inline fs::path BoxRoot(fs::path root, bool inside_box) {
+  return inside_box ? fs::path("/") : root;
+}
+
+} // namespace
+
+fs::path SubmissionRunPath(long id) {
+  return kBoxRoot / PadInt(id, 6);
 }
 
 fs::path CompileBoxPath(long id, CompileSubtask subtask) {
   return SubmissionRunPath(id) / ("compile" + std::to_string((int)subtask));
 }
-fs::path CompileBoxInput(long id, CompileSubtask subtask, Compiler lang) {
-  return Workdir(CompileBoxPath(id, subtask)) / CompileCodeName(subtask, lang);
+fs::path CompileBoxInput(long id, CompileSubtask subtask, Compiler lang, bool inside_box) {
+  return Workdir(BoxRoot(CompileBoxPath(id, subtask), inside_box))
+      / CompileCodeName(subtask, lang);
 }
-fs::path CompileBoxInterlib(long id, int problem_id) {
-  return Workdir(CompileBoxPath(id, CompileSubtask::USERPROG)) / InterlibName(problem_id);
+fs::path CompileBoxInterlib(long id, int problem_id, bool inside_box) {
+  return Workdir(BoxRoot(CompileBoxPath(id, CompileSubtask::USERPROG), inside_box))
+      / InterlibName(problem_id);
 }
-fs::path CompileBoxOutput(long id, CompileSubtask subtask, Compiler lang) {
-  return Workdir(CompileBoxPath(id, subtask)) / CompileResultName(subtask, lang);
+fs::path CompileBoxOutput(long id, CompileSubtask subtask, Compiler lang, bool inside_box) {
+  return Workdir(BoxRoot(CompileBoxPath(id, subtask), inside_box))
+      / CompileResultName(subtask, lang);
 }
+
 fs::path ExecuteBoxPath(long id, int td) {
   return SubmissionRunPath(id) / ("execute" + PadInt(td, 3));
 }
-fs::path ExecuteBoxProgram(long id, int td, Compiler lang) {
-  return Workdir(ExecuteBoxPath(id, td)) / ("prog" + ProgramExtension(lang));
+fs::path ExecuteBoxProgram(long id, int td, Compiler lang, bool inside_box) {
+  return Workdir(BoxRoot(ExecuteBoxPath(id, td), inside_box))
+      / ("prog" + ProgramExtension(lang));
 }
 fs::perms ExecuteBoxProgramPerm(Compiler lang, bool strict) {
   if (!strict) return fs::perms::all;
@@ -121,53 +137,53 @@ fs::perms ExecuteBoxProgramPerm(Compiler lang, bool strict) {
   }
   __builtin_unreachable();
 }
-fs::path ExecuteBoxTdStrictPath(long id, int td) {
-  return ExecuteBoxPath(id, td) / "td";
+fs::path ExecuteBoxTdStrictPath(long id, int td, bool inside_box) {
+  return BoxRoot(ExecuteBoxPath(id, td), inside_box) / "td";
 }
-fs::path ExecuteBoxInput(long id, int td, bool strict) {
+fs::path ExecuteBoxInput(long id, int td, bool strict, bool inside_box) {
   if (strict) {
-    return ExecuteBoxTdStrictPath(id, td) / "input";
+    return ExecuteBoxTdStrictPath(id, td, inside_box) / "input";
   } else {
-    return Workdir(ExecuteBoxPath(id, td)) / "input";
+    return Workdir(BoxRoot(ExecuteBoxPath(id, td), inside_box)) / "input";
   }
 }
-fs::path ExecuteBoxOutput(long id, int td, bool strict) {
+fs::path ExecuteBoxOutput(long id, int td, bool strict, bool inside_box) {
   if (strict) {
-    return ExecuteBoxTdStrictPath(id, td) / "output";
+    return ExecuteBoxTdStrictPath(id, td, inside_box) / "output";
   } else {
-    return Workdir(ExecuteBoxPath(id, td)) / "output";
+    return Workdir(BoxRoot(ExecuteBoxPath(id, td), inside_box)) / "output";
   }
 }
-fs::path ExecuteBoxError(long id, int td) {
-  return Workdir(ExecuteBoxPath(id, td)) / "error";
+fs::path ExecuteBoxError(long id, int td, bool inside_box) {
+  return Workdir(BoxRoot(ExecuteBoxPath(id, td), inside_box)) / "error";
 }
 fs::path ExecuteBoxFinalOutput(long id, int td) {
   return ExecuteBoxPath(id, td) / "output";
 }
-// TODO: pin
+
 fs::path ScoringBoxPath(long id, int td) {
   return SubmissionRunPath(id) / ("scoring" + PadInt(td, 3));
 }
-fs::path ScoringBoxProgram(long id, int td, Compiler lang) {
-  return Workdir(ScoringBoxPath(id, td)) / ("prog" + std::string(ProgramExtension(lang)));
+fs::path ScoringBoxProgram(long id, int td, Compiler lang, bool inside_box) {
+  return Workdir(BoxRoot(ScoringBoxPath(id, td), inside_box)) / ("prog" + std::string(ProgramExtension(lang)));
 }
-fs::path ScoringBoxCode(long id, int td, Compiler lang) {
-  return Workdir(ScoringBoxPath(id, td)) / ("code" + std::string(CodeExtension(lang)));
+fs::path ScoringBoxCode(long id, int td, Compiler lang, bool inside_box) {
+  return Workdir(BoxRoot(ScoringBoxPath(id, td), inside_box)) / ("code" + std::string(CodeExtension(lang)));
 }
-fs::path ScoringBoxUserOutput(long id, int td) {
-  return Workdir(ScoringBoxPath(id, td)) / "user_output";
+fs::path ScoringBoxUserOutput(long id, int td, bool inside_box) {
+  return Workdir(BoxRoot(ScoringBoxPath(id, td), inside_box)) / "user_output";
 }
-fs::path ScoringBoxTdInput(long id, int td) {
-  return Workdir(ScoringBoxPath(id, td)) / "td_input";
+fs::path ScoringBoxTdInput(long id, int td, bool inside_box) {
+  return Workdir(BoxRoot(ScoringBoxPath(id, td), inside_box)) / "td_input";
 }
-fs::path ScoringBoxTdOutput(long id, int td) {
-  return Workdir(ScoringBoxPath(id, td)) / "td_output";
+fs::path ScoringBoxTdOutput(long id, int td, bool inside_box) {
+  return Workdir(BoxRoot(ScoringBoxPath(id, td), inside_box)) / "td_output";
 }
-fs::path ScoringBoxMetaFile(long id, int td) {
-  return Workdir(ScoringBoxPath(id, td)) / "meta";
+fs::path ScoringBoxMetaFile(long id, int td, bool inside_box) {
+  return Workdir(BoxRoot(ScoringBoxPath(id, td), inside_box)) / "meta";
 }
-fs::path ScoringBoxOutput(long id, int td) {
-  return Workdir(ScoringBoxPath(id, td)) / "output";
+fs::path ScoringBoxOutput(long id, int td, bool inside_box) {
+  return Workdir(BoxRoot(ScoringBoxPath(id, td), inside_box)) / "output";
 }
 
 fs::path TdPath(int prob) {
@@ -192,6 +208,6 @@ fs::path SubmissionUserCode(int id) {
 fs::path SubmissionJudgeCode(int id) {
   return SubmissionCodePath(id) / "judge";
 }
-fs::path SubmissionInterlib(int id) {
+fs::path SubmissionInterlibCode(int id) {
   return SubmissionCodePath(id) / "interlib";
 }

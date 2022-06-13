@@ -1,5 +1,5 @@
-#ifndef TESTSUITE_H_
-#define TESTSUITE_H_
+#ifndef SUBMISSION_H_
+#define SUBMISSION_H_
 
 #include <vector>
 #include <cjail/cjail.h>
@@ -16,7 +16,7 @@ enum class SpecJudgeType {
 enum class InterlibType {
   NONE,
   INCLUDE,
-  // TODO: LINK,
+  // TODO FEATURE(link): LINK,
 };
 
 enum class Compiler {
@@ -54,6 +54,7 @@ class Submission {
   int problem_id;
   SpecJudgeType specjudge_type;
   InterlibType interlib_type;
+  Compiler specjudge_lang;
   bool sandbox_strict; // false for backward-compatability
   // task information
   struct TestdataLimit {
@@ -61,8 +62,8 @@ class Submission {
     int64_t time; // us
   };
   std::vector<TestdataLimit> td_limits;
-  // TODO: testdata group
-  // TODO: skip_group
+  // TODO FEATURE(group): testdata group
+  // TODO FEATURE(group): bool skip_group
   // task result
   struct TestdataResult {
     struct cjail_result execute_result;
@@ -80,6 +81,7 @@ class Submission {
       submission_id(0), submitter_id(0), submission_time(0),
       specjudge_type(SpecJudgeType::NORMAL),
       interlib_type(InterlibType::NONE),
+      specjudge_lang(Compiler::GCC_CPP_17),
       sandbox_strict(false),
       verdict(Verdict::NUL) {}
 
@@ -87,8 +89,8 @@ class Submission {
 };
 
 // Call from main thread
-void WorkLoop();
-// This can be called from another thread
+void WorkLoop(bool loop = true);
+// Called from another thread
 void PushSubmission(Submission&&);
 
-#endif  // TESTSUITE_H_
+#endif  // SUBMISSION_H_

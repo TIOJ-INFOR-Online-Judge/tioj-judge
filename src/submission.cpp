@@ -1,4 +1,4 @@
-#include "testsuite.h"
+#include "submission.h"
 
 #include <unistd.h>
 #include <sys/stat.h>
@@ -26,15 +26,11 @@ inline long ToUs(const struct timeval& v) {
 nlohmann::json Submission::TestdataMeta(int subtask) const {
   const struct cjail_result& res = td_results[subtask].execute_result;
   const TestdataLimit& lim = td_limits[subtask];
-
-  long id = submission_internal_id;
-  fs::path box_path = ScoringBoxPath(id, subtask);
-
   return {
-    {"input_file", InsideBox(box_path, ScoringBoxTdInput(id, subtask))},
-    {"answer_file", InsideBox(box_path, ScoringBoxTdOutput(id, subtask))},
-    {"user_output_file", InsideBox(box_path, ScoringBoxUserOutput(id, subtask))},
-    {"user_code_file", InsideBox(box_path, ScoringBoxCode(id, subtask, lang))},
+    {"input_file", ScoringBoxTdInput(-1, -1, true)},
+    {"answer_file", ScoringBoxTdOutput(-1, -1, true)},
+    {"user_output_file", ScoringBoxUserOutput(-1, -1, true)},
+    {"user_code_file", ScoringBoxCode(-1, -1, lang, true)},
     {"problem_id", problem_id},
     {"submission_id", submission_id},
     {"submitter_id", submitter_id},
@@ -68,7 +64,7 @@ struct TaskEntry {
   long id;
   long submission_internal_id;
   Task task;
-  // TODO: group_offset (the position in the same group)
+  // TODO FEATURE(group): group_offset (the position in the same group)
   long priority;
   int indeg;
   std::vector<long> edges;
@@ -80,7 +76,7 @@ struct TaskEntry {
       task(task), priority(priority),
       indeg(0) {}
   bool operator>(const TaskEntry& x) const {
-    // TODO: group
+    // TODO FEATURE(group): order by group_offset first
     return std::make_tuple(priority, -submission_internal_id, -task.subtask) >
            std::make_tuple(x.priority, -x.submission_internal_id, -x.task.subtask);
   }
@@ -104,7 +100,7 @@ std::unordered_map<long, Submission> submission_list;
 // cancelling related
 std::unordered_map<long, long> submission_id_map; // submission id -> internal id
 std::unordered_set<long> cancelled_list;
-// TODO: cancelled group
+// TODO FEATURE(group): cancelled group
 
 /// Helpers for manipulating graphs
 inline void InsertTaskList(TaskEntry&& task) {
@@ -144,7 +140,7 @@ bool SetupCompile(const Submission& sub, const TaskEntry& task) {
       break;
     }
     case CompileSubtask::SPECJUDGE: {
-      Copy(SubmissionJudgeCode(id), CompileBoxInput(id, subtask, Compiler::GCC_CPP_17),
+      Copy(SubmissionJudgeCode(id), CompileBoxInput(id, subtask, sub.specjudge_lang),
           fs::perms::all);
       break;
     }
@@ -161,6 +157,9 @@ void FinalizeCompile(Submission& sub, const TaskEntry& task, const struct cjail_
   }
   if (res.info.si_status != 0 || !fs::is_regular_file(CompileBoxOutput(id, subtask, sub.lang))) {
     sub.verdict = subtask == CompileSubtask::USERPROG ? Verdict::CE : Verdict::ER;
+    if (subtask == CompileSubtask::USERPROG) {
+      // TODO: read/filter compile error message & asynchronously sent it
+    }
     return;
   }
   // normal
@@ -183,15 +182,14 @@ bool SetupExecute(const Submission& sub, const TaskEntry& task) {
   auto prog = ExecuteBoxProgram(id, subtask, sub.lang);
   Copy(CompileBoxOutput(id, CompileSubtask::USERPROG, sub.lang),
        prog, ExecuteBoxProgramPerm(sub.lang, sub.sandbox_strict));
-  chown(prog.c_str(), 0, 0);
   if (sub.sandbox_strict) {
     CreateDirs(ExecuteBoxTdStrictPath(id, subtask), fs::perms::owner_all); // 700
-    Copy(TdInput(sub.problem_id, subtask), ExecuteBoxInput(id, subtask, true),
+    Copy(TdInput(sub.problem_id, subtask), ExecuteBoxInput(id, subtask, sub.sandbox_strict),
         fs::perms::owner_read | fs::perms::owner_write); // 600
     fs::permissions(prog, fs::perms::all & ~(fs::perms::group_write)); // 755
   } else {
     fs::permissions(workdir, fs::perms::all);
-    Copy(TdInput(sub.problem_id, subtask), ExecuteBoxInput(id, subtask, true), kPerm666);
+    Copy(TdInput(sub.problem_id, subtask), ExecuteBoxInput(id, subtask, sub.sandbox_strict), kPerm666);
     fs::permissions(prog, fs::perms::all); // 777
   }
   return true;
@@ -204,6 +202,7 @@ void FinalizeExecute(Submission& sub, const TaskEntry& task, const struct cjail_
   td_result.execute_result = res;
   Move(ExecuteBoxOutput(id, subtask, sub.sandbox_strict),
        ExecuteBoxFinalOutput(id, subtask));
+  chown(ExecuteBoxFinalOutput(id, subtask).c_str(), 0, 0);
   if (!sub.sandbox_strict) {
     auto workdir = Workdir(ExecuteBoxPath(id, subtask));
     Umount(workdir);
@@ -250,8 +249,8 @@ bool SetupScoring(const Submission& sub, const TaskEntry& task) {
   Copy(SubmissionUserCode(id), ScoringBoxCode(id, subtask, sub.lang), kPerm666);
   // special judge program
   fs::path specjudge_prog = sub.specjudge_type == SpecJudgeType::NORMAL ?
-      ""/*TODO: spec judge executable*/ : CompileBoxOutput(id, CompileSubtask::SPECJUDGE, Compiler::GCC_CPP_17);
-  Copy(specjudge_prog, ScoringBoxProgram(id, subtask, Compiler::GCC_CPP_17), fs::perms::all);
+      kDefaultScoringProgram : CompileBoxOutput(id, CompileSubtask::SPECJUDGE, sub.specjudge_lang);
+  Copy(specjudge_prog, ScoringBoxProgram(id, subtask, sub.specjudge_lang), fs::perms::all);
   { // write meta file
     std::ofstream fout(ScoringBoxMetaFile(id, subtask));
     fout << sub.TestdataMeta(subtask);
@@ -348,36 +347,37 @@ void FinalizeSubmission(Submission& sub, const TaskEntry& task) {
   submission_list.erase(id);
 }
 
-void FinalizeTask(long id, const struct cjail_result& res) {
+void FinalizeTask(long id, const struct cjail_result& res, bool skipped = false) {
   auto& entry = task_list[id];
-  auto& sub = submission_list[entry.submission_internal_id];
-  switch (entry.task.type) {
-    case TaskType::COMPILE: FinalizeCompile(sub, entry, res); break;
-    case TaskType::EXECUTE: FinalizeExecute(sub, entry, res); break;
-    case TaskType::SCORING: FinalizeScoring(sub, entry, res); break;
-    case TaskType::FINALIZE: FinalizeSubmission(sub, entry); break;
+  if (!skipped) {
+    auto& sub = submission_list[entry.submission_internal_id];
+    switch (entry.task.type) {
+      case TaskType::COMPILE: FinalizeCompile(sub, entry, res); break;
+      case TaskType::EXECUTE: FinalizeExecute(sub, entry, res); break;
+      case TaskType::SCORING: FinalizeScoring(sub, entry, res); break;
+      case TaskType::FINALIZE: __builtin_unreachable(); // skipped = true if FINALIZE
+    }
   }
   Remove(entry);
 }
 
-int DispatchTask(long id) {
+bool DispatchTask(long id) {
   auto& entry = task_list[id];
   auto& sub = submission_list[entry.submission_internal_id];
   bool res = false;
   switch (entry.task.type) {
-    // TODO: setup
     case TaskType::COMPILE: res = SetupCompile(sub, entry); break;
     case TaskType::EXECUTE: res = SetupExecute(sub, entry); break;
     case TaskType::SCORING: res = SetupScoring(sub, entry); break;
-    case TaskType::FINALIZE: {
-      FinalizeTask(id, {});
-      return 0;
-    }
+    case TaskType::FINALIZE: res = false; FinalizeSubmission(sub, entry); break;
   }
-  if (!res) return 0;
+  if (!res) {
+    FinalizeTask(id, {}, true);
+    return false;
+  }
   int handle = RunTask(submission_list[entry.submission_internal_id], entry.task);
   handle_map[handle] = id;
-  return 1;
+  return true;
 }
 
 std::pair<long, struct cjail_result> WaitTask() {
@@ -390,10 +390,10 @@ std::pair<long, struct cjail_result> WaitTask() {
 
 } // namespace
 
-void WorkLoop() {
+void WorkLoop(bool loop) {
   umask(0022);
   std::unique_lock lck(task_mtx);
-  while (true) {
+  do {
     // no task running here
     task_cv.wait(lck, []{ return !task_queue.empty(); });
     int task_running = 0;
@@ -403,7 +403,7 @@ void WorkLoop() {
         task_queue.pop();
         task_running += DispatchTask(tid);
         // if this is a finalize task or a skipped stage (such as execute/scoring stage of a CE submission),
-        //  it will finish immediately without adding any running task
+        //  it will finish & finalize immediately without adding any running task
       } else {
         lck.unlock();
         std::pair<long, struct cjail_result> tid = WaitTask();
@@ -412,7 +412,7 @@ void WorkLoop() {
         task_running--;
       }
     }
-  }
+  } while (loop);
 }
 
 void PushSubmission(Submission&& sub) {
