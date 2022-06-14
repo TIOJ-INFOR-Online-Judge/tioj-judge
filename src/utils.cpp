@@ -71,23 +71,42 @@ fs::path InsideBox(const fs::path& box, const fs::path& path) {
 
 bool MountTmpfs(const fs::path& path, long size_kib) {
   spdlog::debug("Mount tmpfs on {}, size {}", path.c_str(), size_kib);
-  return 0 == mount("tmpfs", path.c_str(), "tmpfs", 0,
-                    ("size=" + std::to_string(size_kib) + 'k').c_str());
+  bool ret = 0 == mount("tmpfs", path.c_str(), "tmpfs", 0,
+                        ("size=" + std::to_string(size_kib) + 'k').c_str());
+  if (!ret) spdlog::warn("Failed mounting tmpfs on {}: {}", path.c_str(), strerror(errno));
+  return ret;
 }
 
 bool Umount(const fs::path& path) {
   spdlog::debug("Umount {}", path.c_str());
-  return 0 == umount(path.c_str());
+  bool ret = 0 == umount(path.c_str());
+  if (!ret) spdlog::warn("Failed unmounting {}: {}", path.c_str(), strerror(errno));
+  return ret;
 }
 
 bool CreateDirs(const fs::path& path, fs::perms perms) {
   spdlog::debug("Create directories {}", path.c_str());
   std::error_code ec;
   fs::create_directories(path, ec);
-  if (ec) return false;
+  if (ec) goto err;
   if (perms == fs::perms::unknown) return true;
   fs::permissions(path, perms, ec);
-  return !ec;
+  if (ec) goto err;
+  return true;
+err:
+  spdlog::warn("Failed creating directory {}: {}", path.c_str(), strerror(ec.value()));
+  return false;
+}
+
+bool RemoveAll(const fs::path& path) {
+  spdlog::debug("Delete {}", path.c_str());
+  std::error_code ec;
+  fs::remove_all(path, ec);
+  if (ec) goto err;
+  return true;
+err:
+  spdlog::warn("Failed deleting {}: {}", path.c_str(), strerror(ec.value()));
+  return false;
 }
 
 bool Move(const fs::path& from, const fs::path& to, fs::perms perms) {
@@ -95,21 +114,29 @@ bool Move(const fs::path& from, const fs::path& to, fs::perms perms) {
   std::error_code ec;
   fs::rename(from, to, ec);
   if (ec) {
-    if (ec.value() != EXDEV) return false;
-    fs::copy(from, to, ec);
-    if (ec) return false;
+    if (ec.value() != EXDEV) goto err;
+    fs::copy(from, to, fs::copy_options::overwrite_existing, ec);
+    if (ec) goto err;
   }
   if (perms == fs::perms::unknown) return true;
   fs::permissions(to, perms, ec);
-  return !ec;
+  if (ec) goto err;
+  return true;
+err:
+  spdlog::warn("Failed moving {} -> {}: {}", from.c_str(), to.c_str(), strerror(ec.value()));
+  return false;
 }
 
 bool Copy(const fs::path& from, const fs::path& to, fs::perms perms) {
   spdlog::debug("Copy file {} -> {}", from.c_str(), to.c_str());
   std::error_code ec;
-  fs::copy_file(from, to, ec);
-  if (ec) return false;
+  fs::copy(from, to, fs::copy_options::overwrite_existing, ec);
+  if (ec) goto err;
   if (perms == fs::perms::unknown) return true;
   fs::permissions(to, perms, ec);
-  return !ec;
+  if (ec) goto err;
+  return true;
+err:
+  spdlog::warn("Failed copying {} -> {}: {}", from.c_str(), to.c_str(), strerror(ec.value()));
+  return false;
 }

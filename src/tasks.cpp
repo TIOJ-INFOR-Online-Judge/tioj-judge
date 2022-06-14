@@ -133,7 +133,7 @@ struct cjail_result RunExecute(const Submission& sub, const Task& task, int uid)
     }
     // TODO: check haskell
     opt.fd_input = open(ExecuteBoxInput(id, subtask, sub.sandbox_strict).c_str(), O_RDONLY);
-    opt.fd_output = open(ExecuteBoxOutput(id, subtask, sub.sandbox_strict).c_str(), O_WRONLY, 0600);
+    opt.fd_output = open(ExecuteBoxOutput(id, subtask, sub.sandbox_strict).c_str(), O_WRONLY | O_CREAT, 0600);
     opt.error = "/dev/null";
   } else {
     opt.dirs = {"/usr", "/lib", "/lib64", "/etc/alternatives", "/bin"};
@@ -152,7 +152,7 @@ struct cjail_result RunScoring(const Submission& sub, const Task& task, int uid)
   std::string program = ScoringBoxProgram(-1, -1, sub.lang, true);
 
   SandboxOptions opt;
-  opt.boxdir = ExecuteBoxPath(id, subtask);
+  opt.boxdir = ScoringBoxPath(id, subtask);
   opt.command = ExecuteCommand(sub.specjudge_lang, program);
   if (sub.specjudge_type == SpecjudgeType::SPECJUDGE_OLD) {
     opt.command.insert(opt.command.end(), {
@@ -166,6 +166,7 @@ struct cjail_result RunScoring(const Submission& sub, const Task& task, int uid)
     opt.command.push_back(ScoringBoxMetaFile(-1, -1, true));
   }
   opt.workdir = Workdir("/");
+  opt.output = ScoringBoxOutput(-1, -1, true);
   opt.uid = opt.gid = uid;
   opt.wall_time = 60L * 1'000'000;
   opt.rss = 2L * 1024 * 1024; // 2G
@@ -201,7 +202,7 @@ bool Wait() {
     spdlog::debug("Task handle={} finished", i.first);
     struct cjail_result res = {};
     IGNORE_RETURN(read(i.first, &res, sizeof(struct cjail_result)));
-    close(i.first);
+    // we don't close(i.first) here, because it will release the handle and make it clash
     waitpid(i.second.first, nullptr, 0);
     uid_pool.push_back(i.second.second);
     finished[i.first] = res;
@@ -255,6 +256,7 @@ std::pair<int, struct cjail_result> WaitAnyResult() {
   if (finished.empty()) Wait();
   auto ret = *finished.begin();
   finished.erase(finished.begin());
+  close(ret.first); // delay close
   spdlog::debug("Task handle={} returned", ret.first);
   return ret;
 }
@@ -278,6 +280,7 @@ std::pair<int, struct cjail_result> WaitAnyResult(const std::vector<int>& handle
       if (it != finished.end()) {
         auto ret = *it;
         finished.erase(it);
+        close(ret.first); // delay close
         spdlog::debug("Task handle={} returned", ret.first);
         return ret;
       }

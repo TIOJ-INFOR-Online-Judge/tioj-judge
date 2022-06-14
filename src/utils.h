@@ -30,6 +30,7 @@ fs::path InsideBox(const fs::path& box, const fs::path& path);
 bool MountTmpfs(const fs::path&, long size_kib);
 bool Umount(const fs::path&);
 bool CreateDirs(const fs::path&, fs::perms = fs::perms::unknown);
+bool RemoveAll(const fs::path&);
 // allow cross-device move
 bool Move(const fs::path& from, const fs::path& to, fs::perms = fs::perms::unknown);
 bool Copy(const fs::path& from, const fs::path& to, fs::perms = fs::perms::unknown);

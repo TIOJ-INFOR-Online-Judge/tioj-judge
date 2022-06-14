@@ -78,8 +78,8 @@ struct TaskEntry {
       indeg(0) {}
   bool operator>(const TaskEntry& x) const {
     // TODO FEATURE(group): order by group_offset first
-    return std::make_tuple(priority, -submission_internal_id, -task.subtask) >
-           std::make_tuple(x.priority, -x.submission_internal_id, -x.task.subtask);
+    return std::make_tuple(priority, -submission_internal_id, task.subtask) >
+           std::make_tuple(x.priority, -x.submission_internal_id, x.task.subtask);
   }
 };
 long TaskEntry::task_count = 0;
@@ -334,8 +334,8 @@ void FinalizeScoring(Submission& sub, const TaskEntry& task, const struct cjail_
   }
   // remove testdata-related files
   std::error_code ec;
-  fs::remove_all(ExecuteBoxPath(id, subtask), ec);
-  fs::remove_all(ScoringBoxPath(id, subtask), ec);
+  RemoveAll(ExecuteBoxPath(id, subtask));
+  RemoveAll(ScoringBoxPath(id, subtask));
   if (!cancelled_list.count(id)) {
     spdlog::info("Scoring finished: id={} subtask={} verdict={} score={} time={} vss={} rss={}",
                  id, subtask, VerdictToAbr(td_result.verdict),
@@ -347,9 +347,8 @@ void FinalizeScoring(Submission& sub, const TaskEntry& task, const struct cjail_
 /// Submission tasks env teardown
 void FinalizeSubmission(Submission& sub, const TaskEntry& task) {
   long id = sub.submission_internal_id;
-  std::error_code ec;
-  fs::remove_all(SubmissionCodePath(id), ec);
-  fs::remove_all(SubmissionRunPath(id), ec);
+  RemoveAll(SubmissionCodePath(id));
+  RemoveAll(SubmissionRunPath(id));
   // TODO: set overall verdict
   if (sub.td_results.size()) {
     sub.verdict = (Verdict)std::max((int)sub.verdict,
@@ -369,8 +368,8 @@ void FinalizeSubmission(Submission& sub, const TaskEntry& task) {
 
 void FinalizeTask(long id, const struct cjail_result& res, bool skipped = false) {
   auto& entry = task_list[id];
-  spdlog::info("Finalizing task: id={} tasktype={} subtask={} skipped={}",
-               id, TaskTypeName(entry.task.type), entry.task.subtask, skipped);
+  spdlog::info("Finalizing task: id={} taskid={} tasktype={} subtask={} skipped={}",
+               entry.submission_internal_id, id, TaskTypeName(entry.task.type), entry.task.subtask, skipped);
   if (!skipped) {
     auto& sub = submission_list[entry.submission_internal_id];
     switch (entry.task.type) {
@@ -386,8 +385,8 @@ void FinalizeTask(long id, const struct cjail_result& res, bool skipped = false)
 bool DispatchTask(long id) {
   auto& entry = task_list[id];
   auto& sub = submission_list[entry.submission_internal_id];
-  spdlog::info("Dispatching task: id={} tasktype={} subtask={}",
-               id, TaskTypeName(entry.task.type), entry.task.subtask);
+  spdlog::info("Dispatching task: id={} taskid={} tasktype={} subtask={}",
+               entry.submission_internal_id, id, TaskTypeName(entry.task.type), entry.task.subtask);
   bool res = false;
   switch (entry.task.type) {
     case TaskType::COMPILE: res = SetupCompile(sub, entry); break;
@@ -421,7 +420,7 @@ void WorkLoop(bool loop) {
     // no task running here
     task_cv.wait(lck, []{ return !task_queue.empty(); });
     int task_running = 0;
-    while (!task_queue.empty()) {
+    while (task_running || !task_queue.empty()) {
       if (task_running < max_parallel && task_queue.size()) {
         long tid = task_queue.top();
         task_queue.pop();
@@ -456,7 +455,7 @@ void PushSubmission(Submission&& sub) {
   TaskEntry finalize(id, {TaskType::FINALIZE, 0}, priority);
   for (int i = 0; i < (int)sub.td_limits.size(); i++) {
     executes.emplace_back(id, (Task){TaskType::EXECUTE, i}, priority);
-    scorings.emplace_back(id, (Task){TaskType::EXECUTE, i}, priority);
+    scorings.emplace_back(id, (Task){TaskType::SCORING, i}, priority);
     Link(executes.back(), scorings.back());
     Link(scorings.back(), finalize);
   }
