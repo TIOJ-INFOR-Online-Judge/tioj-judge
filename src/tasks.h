@@ -1,19 +1,27 @@
 #ifndef TASKS_H_
 #define TASKS_H_
 
-#include "sandbox.h"
+#include <cjail/cjail.h>
 #include "submission.h"
 
+#define ENUM_TASK_TYPE_ \
+  X(COMPILE) \
+  X(EXECUTE) \
+  X(SCORING) /* special judge */ \
+  X(FINALIZE)
 enum class TaskType {
-  COMPILE,
-  EXECUTE,
-  SCORING, // special judge
-  FINALIZE,
+#define X(name) name,
+  ENUM_TASK_TYPE_
+#undef X
 };
 
+#define ENUM_COMPILE_SUBTASK_ \
+  X(USERPROG) \
+  X(SPECJUDGE)
 enum class CompileSubtask : int {
-  USERPROG,
-  SPECJUDGE,
+#define X(name) name,
+  ENUM_COMPILE_SUBTASK_
+#undef X
 };
 
 struct Task {

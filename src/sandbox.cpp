@@ -3,6 +3,8 @@
 #include <unistd.h>
 #include <string>
 
+#include <fmt/ranges.h>
+#include <spdlog/spdlog.h>
 #include "utils.h"
 
 CJailCtxClass SandboxOptions::ToCJailCtx() const {
@@ -64,9 +66,9 @@ CJailCtxClass SandboxOptions::ToCJailCtx() const {
 struct cjail_result SandboxExec(const SandboxOptions& opt) {
   CJailCtxClass ctx = opt.ToCJailCtx();
   struct cjail_result ret = {};
-  Log("[debug] call cjail_exec");
+  spdlog::debug("cjail_exec command: {}", fmt::format("{}", opt.command));
   if (cjail_exec(&ctx.GetCtx(), &ret) < 0) {
-    Log("cjail_exec error:", strerror(errno));
+    spdlog::warn("cjail_exec error: errno={} {}", errno, strerror(errno));
     ret.timekill = -1;
   }
   return ret;

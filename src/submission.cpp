@@ -9,6 +9,7 @@
 #include <unordered_map>
 #include <condition_variable>
 
+#include <spdlog/spdlog.h>
 #include "tasks.h"
 #include "utils.h"
 #include "paths.h"
@@ -151,18 +152,23 @@ bool SetupCompile(const Submission& sub, const TaskEntry& task) {
 void FinalizeCompile(Submission& sub, const TaskEntry& task, const struct cjail_result& res) {
   long id = sub.submission_internal_id;
   CompileSubtask subtask = (CompileSubtask)task.task.subtask;
-  if (res.timekill || res.oomkill) {
-    sub.verdict = subtask == CompileSubtask::USERPROG ? Verdict::CLE : Verdict::ER;
-    return;
-  }
-  if (res.info.si_status != 0 || !fs::is_regular_file(CompileBoxOutput(id, subtask, sub.lang))) {
-    sub.verdict = subtask == CompileSubtask::USERPROG ? Verdict::CE : Verdict::ER;
-    if (subtask == CompileSubtask::USERPROG) {
-      // TODO: read/filter compile error message & asynchronously sent it
+  if (res.timekill || res.oomkill || res.info.si_status != 0 ||
+      !fs::is_regular_file(CompileBoxOutput(id, subtask, sub.lang))) {
+    if (res.timekill || res.oomkill) {
+      sub.verdict = subtask == CompileSubtask::USERPROG ? Verdict::CLE : Verdict::ER;
+    } else {
+      sub.verdict = subtask == CompileSubtask::USERPROG ? Verdict::CE : Verdict::ER;
     }
-    return;
+    spdlog::info("Compilation failed: id={} subtask={} verdict={}",
+                 id, CompileSubtaskName(subtask), VerdictToAbr(sub.verdict));
+    if (subtask == CompileSubtask::USERPROG) {
+      // TODO: read/filter compile error message to sub.message
+      if (sub.reporter) sub.reporter->ReportCEMessage(sub);
+    }
+  } else {
+    // success
+    spdlog::info("Compilation successful: id={} subtask={}", id, CompileSubtaskName(subtask));
   }
-  // normal
 }
 
 bool SetupExecute(const Submission& sub, const TaskEntry& task) {
@@ -198,11 +204,12 @@ bool SetupExecute(const Submission& sub, const TaskEntry& task) {
 void FinalizeExecute(Submission& sub, const TaskEntry& task, const struct cjail_result& res) {
   long id = sub.submission_internal_id;
   int subtask = task.task.subtask;
+  if (subtask >= (int)sub.td_results.size()) sub.td_results.resize(subtask + 1);
   auto& td_result = sub.td_results[subtask];
   td_result.execute_result = res;
   Move(ExecuteBoxOutput(id, subtask, sub.sandbox_strict),
        ExecuteBoxFinalOutput(id, subtask));
-  chown(ExecuteBoxFinalOutput(id, subtask).c_str(), 0, 0);
+  IGNORE_RETURN(chown(ExecuteBoxFinalOutput(id, subtask).c_str(), 0, 0));
   if (!sub.sandbox_strict) {
     auto workdir = Workdir(ExecuteBoxPath(id, subtask));
     Umount(workdir);
@@ -231,6 +238,9 @@ void FinalizeExecute(Submission& sub, const TaskEntry& task, const struct cjail_
   } else {
     td_result.verdict = Verdict::NUL;
   }
+  spdlog::info("Execute finished: id={} subtask={} verdict={} time={} vss={} rss={}",
+               id, subtask, VerdictToAbr(td_result.verdict),
+               td_result.time, td_result.vss, td_result.rss);
 }
 
 bool SetupScoring(const Submission& sub, const TaskEntry& task) {
@@ -240,7 +250,7 @@ bool SetupScoring(const Submission& sub, const TaskEntry& task) {
   if (cancelled_list.count(id)) return false; // cancellation check
   // if already TLE/MLE/etc, do not invoke old-style special judge
   if (sub.td_results[subtask].verdict != Verdict::NUL &&
-      sub.specjudge_type != SpecJudgeType::SPECJUDGE_NEW) return false;
+      sub.specjudge_type != SpecjudgeType::SPECJUDGE_NEW) return false;
   CreateDirs(Workdir(ScoringBoxPath(id, subtask)), fs::perms::all);
   Move(ExecuteBoxFinalOutput(id, subtask),
        ScoringBoxUserOutput(id, subtask), kPerm666);
@@ -248,7 +258,7 @@ bool SetupScoring(const Submission& sub, const TaskEntry& task) {
   Copy(TdOutput(sub.problem_id, subtask), ScoringBoxTdOutput(id, subtask), kPerm666);
   Copy(SubmissionUserCode(id), ScoringBoxCode(id, subtask, sub.lang), kPerm666);
   // special judge program
-  fs::path specjudge_prog = sub.specjudge_type == SpecJudgeType::NORMAL ?
+  fs::path specjudge_prog = sub.specjudge_type == SpecjudgeType::NORMAL ?
       kDefaultScoringProgram : CompileBoxOutput(id, CompileSubtask::SPECJUDGE, sub.specjudge_lang);
   Copy(specjudge_prog, ScoringBoxProgram(id, subtask, sub.specjudge_lang), fs::perms::all);
   { // write meta file
@@ -268,7 +278,7 @@ void FinalizeScoring(Submission& sub, const TaskEntry& task, const struct cjail_
   td_result.score = 0;
   if (!fs::is_regular_file(output_path) || res.info.si_status != 0) {
     // WA
-  } else if (sub.specjudge_type == SpecJudgeType::SPECJUDGE_OLD) {
+  } else if (sub.specjudge_type == SpecjudgeType::SPECJUDGE_OLD) {
     int x = 1;
     std::ifstream fin(output_path);
     if (fin >> x && x == 0) {
@@ -327,7 +337,10 @@ void FinalizeScoring(Submission& sub, const TaskEntry& task, const struct cjail_
   fs::remove_all(ExecuteBoxPath(id, subtask), ec);
   fs::remove_all(ScoringBoxPath(id, subtask), ec);
   if (!cancelled_list.count(id)) {
-    // TODO: send message to server, asynchronously
+    spdlog::info("Scoring finished: id={} subtask={} verdict={} score={} time={} vss={} rss={}",
+                 id, subtask, VerdictToAbr(td_result.verdict),
+                 td_result.score, td_result.time, td_result.vss, td_result.rss);
+    if (sub.reporter) sub.reporter->ReportScoringResult(sub, subtask);
   }
 }
 
@@ -337,11 +350,18 @@ void FinalizeSubmission(Submission& sub, const TaskEntry& task) {
   std::error_code ec;
   fs::remove_all(SubmissionCodePath(id), ec);
   fs::remove_all(SubmissionRunPath(id), ec);
+  // TODO: set overall verdict
+  if (sub.td_results.size()) {
+    sub.verdict = (Verdict)std::max((int)sub.verdict,
+        (int)std::max_element(sub.td_results.begin(), sub.td_results.end(),
+            [](const auto& a, const auto& b){ return (int)a.verdict < (int)b.verdict; })->verdict);
+  }
   if (auto it = cancelled_list.find(id); it != cancelled_list.end()) {
     // cancelled, don't send anything to server
     cancelled_list.erase(it);
   } else {
-    // TODO: send finalized message to server, asynchronously
+    spdlog::info("Submission finished: id={} sub_id={}", id, sub.submission_id);
+    if (sub.reporter) sub.reporter->ReportOverallResult(sub);
   }
   submission_id_map.erase(id);
   submission_list.erase(id);
@@ -349,6 +369,8 @@ void FinalizeSubmission(Submission& sub, const TaskEntry& task) {
 
 void FinalizeTask(long id, const struct cjail_result& res, bool skipped = false) {
   auto& entry = task_list[id];
+  spdlog::info("Finalizing task: id={} tasktype={} subtask={} skipped={}",
+               id, TaskTypeName(entry.task.type), entry.task.subtask, skipped);
   if (!skipped) {
     auto& sub = submission_list[entry.submission_internal_id];
     switch (entry.task.type) {
@@ -364,6 +386,8 @@ void FinalizeTask(long id, const struct cjail_result& res, bool skipped = false)
 bool DispatchTask(long id) {
   auto& entry = task_list[id];
   auto& sub = submission_list[entry.submission_internal_id];
+  spdlog::info("Dispatching task: id={} tasktype={} subtask={}",
+               id, TaskTypeName(entry.task.type), entry.task.subtask);
   bool res = false;
   switch (entry.task.type) {
     case TaskType::COMPILE: res = SetupCompile(sub, entry); break;
@@ -424,28 +448,28 @@ void PushSubmission(Submission&& sub) {
   //            |              |              |
   //            +-> execute_n -+-> scoring ---+
   //
-  int sub_id = sub.submission_internal_id;
+  int id = sub.submission_internal_id;
   // We use submissions time as priority; this can be adjusted if needed
   //   (e.g. put contest submissions before normal submissions
   long priority = -sub.submission_time;
   std::vector<TaskEntry> executes, scorings;
-  TaskEntry finalize(sub_id, {TaskType::FINALIZE, 0}, priority);
+  TaskEntry finalize(id, {TaskType::FINALIZE, 0}, priority);
   for (int i = 0; i < (int)sub.td_limits.size(); i++) {
-    executes.emplace_back(sub_id, (Task){TaskType::EXECUTE, i}, priority);
-    scorings.emplace_back(sub_id, (Task){TaskType::EXECUTE, i}, priority);
+    executes.emplace_back(id, (Task){TaskType::EXECUTE, i}, priority);
+    scorings.emplace_back(id, (Task){TaskType::EXECUTE, i}, priority);
     Link(executes.back(), scorings.back());
     Link(scorings.back(), finalize);
   }
   std::lock_guard<std::mutex> lck(task_mtx);
   {
-    TaskEntry compile(sub_id, {TaskType::COMPILE, (int)CompileSubtask::USERPROG}, priority);
+    TaskEntry compile(id, {TaskType::COMPILE, (int)CompileSubtask::USERPROG}, priority);
     for (auto& i : executes) Link(compile, i);
     if (executes.empty()) Link(compile, finalize);
     InsertTaskList(std::move(compile));
   }
-  if (sub.specjudge_type == SpecJudgeType::SPECJUDGE_OLD ||
-      sub.specjudge_type == SpecJudgeType::SPECJUDGE_NEW) {
-    TaskEntry compile(sub_id, {TaskType::COMPILE, (int)CompileSubtask::SPECJUDGE}, priority);
+  if (sub.specjudge_type == SpecjudgeType::SPECJUDGE_OLD ||
+      sub.specjudge_type == SpecjudgeType::SPECJUDGE_NEW) {
+    TaskEntry compile(id, {TaskType::COMPILE, (int)CompileSubtask::SPECJUDGE}, priority);
     for (auto& i : scorings) Link(compile, i);
     if (executes.empty()) Link(compile, finalize);
     InsertTaskList(std::move(compile));
@@ -453,10 +477,11 @@ void PushSubmission(Submission&& sub) {
   for (auto& i : executes) InsertTaskList(std::move(i));
   for (auto& i : scorings) InsertTaskList(std::move(i));
   InsertTaskList(std::move(finalize));
-  submission_list.insert({sub_id, std::move(sub)});
-  if (auto it = submission_id_map.insert({sub.submission_id, sub_id}); !it.second) {
+  submission_list.insert({id, std::move(sub)});
+  if (auto it = submission_id_map.insert({sub.submission_id, id}); !it.second) {
     // if the same submission is already judging, mark it as cancelled
     cancelled_list.insert(it.first->second);
-    it.first->second = sub_id;
+    it.first->second = id;
   }
+  spdlog::info("Submission enqueued: id={} sub_id={} prob_id={}", id, sub.submission_id, sub.problem_id);
 }

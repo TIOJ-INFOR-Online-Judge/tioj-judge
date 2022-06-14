@@ -7,8 +7,10 @@
 #include <map>
 #include <unordered_map>
 
+#include <spdlog/spdlog.h>
 #include "paths.h"
 #include "utils.h"
+#include "sandbox.h"
 
 namespace {
 
@@ -56,6 +58,8 @@ std::vector<std::string> ExecuteCommand(Compiler lang, const std::string& progra
 struct cjail_result RunCompile(const Submission& sub, const Task& task, int uid) {
   long id = sub.submission_internal_id;
   CompileSubtask subtask = (CompileSubtask)task.subtask;
+  spdlog::debug("Generating compile settings: id={} subid={}, subtask={}",
+                id, sub.submission_id, CompileSubtaskName(subtask));
   Compiler lang;
   switch (subtask) {
     case CompileSubtask::USERPROG: lang = sub.lang; break;
@@ -106,6 +110,7 @@ struct cjail_result RunCompile(const Submission& sub, const Task& task, int uid)
 struct cjail_result RunExecute(const Submission& sub, const Task& task, int uid) {
   long id = sub.submission_internal_id;
   int subtask = task.subtask;
+  spdlog::debug("Generating execute settings: id={} subid={}, subtask={}", id, sub.submission_id, task.subtask);
   auto& lim = sub.td_limits[subtask];
   std::string program = ExecuteBoxProgram(-1, -1, sub.lang, true);
 
@@ -143,12 +148,13 @@ struct cjail_result RunExecute(const Submission& sub, const Task& task, int uid)
 struct cjail_result RunScoring(const Submission& sub, const Task& task, int uid) {
   long id = sub.submission_internal_id;
   int subtask = task.subtask;
+  spdlog::debug("Generating scoring settings: id={} subid={}, subtask={}", id, sub.submission_id, task.subtask);
   std::string program = ScoringBoxProgram(-1, -1, sub.lang, true);
 
   SandboxOptions opt;
   opt.boxdir = ExecuteBoxPath(id, subtask);
   opt.command = ExecuteCommand(sub.specjudge_lang, program);
-  if (sub.specjudge_type == SpecJudgeType::SPECJUDGE_OLD) {
+  if (sub.specjudge_type == SpecjudgeType::SPECJUDGE_OLD) {
     opt.command.insert(opt.command.end(), {
       ScoringBoxUserOutput(-1, -1, true),
       ScoringBoxTdInput(-1, -1, true),
@@ -192,8 +198,9 @@ bool Wait() {
   std::vector<int> to_remove;
   for (auto& i : running) {
     if (!FD_ISSET(i.first, &select_fdset)) continue;
+    spdlog::debug("Task handle={} finished", i.first);
     struct cjail_result res = {};
-    read(i.first, &res, sizeof(struct cjail_result));
+    IGNORE_RETURN(read(i.first, &res, sizeof(struct cjail_result)));
     close(i.first);
     waitpid(i.second.first, nullptr, 0);
     uid_pool.push_back(i.second.second);
@@ -232,12 +239,14 @@ int RunTask(const Submission& sub, const Task& task) {
       case TaskType::SCORING: ret = RunScoring(sub, task, uid); break;
       case TaskType::FINALIZE: __builtin_unreachable();
     }
-    write(pipefd[1], &ret, sizeof(struct cjail_result));
+    IGNORE_RETURN(write(pipefd[1], &ret, sizeof(struct cjail_result)));
     exit(0);
   }
   close(pipefd[1]);
   running[pipefd[0]] = {pid, uid};
   FD_SET(pipefd[0], &running_fdset);
+  spdlog::debug("Task type={} subtask={} of {} started, handle={} pid={} uid={}",
+                TaskTypeName(task.type), task.subtask, sub.submission_internal_id, pipefd[0], pid, uid);
   return pipefd[0];
 }
 
@@ -246,6 +255,7 @@ std::pair<int, struct cjail_result> WaitAnyResult() {
   if (finished.empty()) Wait();
   auto ret = *finished.begin();
   finished.erase(finished.begin());
+  spdlog::debug("Task handle={} returned", ret.first);
   return ret;
 }
 
@@ -268,6 +278,7 @@ std::pair<int, struct cjail_result> WaitAnyResult(const std::vector<int>& handle
       if (it != finished.end()) {
         auto ret = *it;
         finished.erase(it);
+        spdlog::debug("Task handle={} returned", ret.first);
         return ret;
       }
     }

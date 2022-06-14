@@ -2,86 +2,86 @@
 
 #include <sys/mount.h>
 
-const char* VerdictToStr(Verdict verdict) {
-  switch (verdict) {
-    case Verdict::NUL: return "nil";
-    case Verdict::AC: return "Accepted";
-    case Verdict::WA: return "Wrong Answer";
-    case Verdict::TLE: return "Time Limit Exceeded";
-    case Verdict::MLE: return "Memory Limit Exceeded";
-    case Verdict::OLE: return "Output Limit Exceeded";
-    case Verdict::RE: return "Runtime Error (exited with nonzero status)";
-    case Verdict::SIG: return "Runtime Error (exited with signal)";
-    case Verdict::CE: return "Compile Error";
-    case Verdict::CLE: return "Compilation Limit Exceeded";
-    case Verdict::ER: return "WTF!";
+#include <spdlog/spdlog.h>
+
+#define ENUM_SWITCH_FUNCTION(DEF, typ, mac) \
+  DEF(typ param) { \
+    switch (param) { \
+      mac \
+    } \
+    __builtin_unreachable(); \
   }
-  __builtin_unreachable();
-}
+#define X_RETURN_ARG1(cls, x, ...) case cls::x: return #x;
+#define X_RETURN_ARG2(cls, x, y, ...) case cls::x: return y;
+#define X_RETURN_ARG3(cls, x, y, z, ...) case cls::x: return z;
+
+#define X(...) X_RETURN_ARG3(Verdict, __VA_ARGS__)
+ENUM_SWITCH_FUNCTION(const char* VerdictToDesc, Verdict, ENUM_VERDICT_)
+#undef X
+
+static const char* kVerdictAbrTable[] = {
+#define X(name, abr, desc) abr,
+  ENUM_VERDICT_
+#undef X
+};
 
 const char* VerdictToAbr(Verdict verdict) {
-  switch (verdict) {
-    case Verdict::NUL: return "";
-    case Verdict::AC: return "AC";
-    case Verdict::WA: return "WA";
-    case Verdict::TLE: return "TLE";
-    case Verdict::MLE: return "MLE";
-    case Verdict::OLE: return "OLE";
-    case Verdict::RE: return "RE";
-    case Verdict::SIG: return "SIG";
-    case Verdict::CE: return "CE";
-    case Verdict::CLE: return "CLE";
-    case Verdict::ER: return "ER";
-  }
-  __builtin_unreachable();
+  return kVerdictAbrTable[(int)verdict];
 }
 
 Verdict AbrToVerdict(const std::string& str, bool runtime_only) {
-  if (str == "AC") return Verdict::AC;
-  if (str == "WA") return Verdict::WA;
-  if (str == "TLE") return Verdict::TLE;
-  if (str == "MLE") return Verdict::MLE;
-  if (str == "OLE") return Verdict::OLE;
-  if (str == "RE") return Verdict::RE;
-  if (str == "SIG") return Verdict::SIG;
+  for (int i = (int)Verdict::AC; i < (int)Verdict::CE; i++) {
+    if (str == kVerdictAbrTable[i]) return (Verdict)i;
+  }
   if (runtime_only) return Verdict::NUL;
-  if (str == "CE") return Verdict::CE;
-  if (str == "CLE") return Verdict::CLE;
-  if (str == "ER") return Verdict::ER;
+  for (int i = (int)Verdict::CE; i <= (int)Verdict::ER; i++) {
+    if (str == kVerdictAbrTable[i]) return (Verdict)i;
+  }
   return Verdict::NUL;
 }
 
-const char* CompilerName(Compiler compiler) {
-  switch (compiler) {
-    case Compiler::GCC_CPP_98: return "c++98";
-    case Compiler::GCC_CPP_11: return "c++11";
-    case Compiler::GCC_CPP_14: return "c++14";
-    case Compiler::GCC_CPP_17: return "c++17";
-    case Compiler::GCC_CPP_20: return "c++20";
-    case Compiler::GCC_C_90: return "c90";
-    case Compiler::GCC_C_98: return "c98";
-    case Compiler::GCC_C_11: return "c11";
-    case Compiler::HASKELL: return "haskell";
-    case Compiler::PYTHON2: return "python2";
-    case Compiler::PYTHON3: return "python3";
-  }
-  __builtin_unreachable();
-}
+#define X(...) X_RETURN_ARG2(Compiler, __VA_ARGS__)
+ENUM_SWITCH_FUNCTION(const char* CompilerName, Compiler, ENUM_COMPILER_)
+#undef X
+
+#define X(...) X_RETURN_ARG1(TaskType, __VA_ARGS__)
+ENUM_SWITCH_FUNCTION(const char* TaskTypeName, TaskType, ENUM_TASK_TYPE_)
+#undef X
+
+#define X(...) X_RETURN_ARG1(CompileSubtask, __VA_ARGS__)
+ENUM_SWITCH_FUNCTION(const char* CompileSubtaskName, CompileSubtask, ENUM_COMPILE_SUBTASK_)
+#undef X
+
+#define X(...) X_RETURN_ARG1(SpecjudgeType, __VA_ARGS__)
+ENUM_SWITCH_FUNCTION(const char* SpecjudgeTypeName, SpecjudgeType, ENUM_SPECJUDGE_TYPE_)
+#undef X
+
+#define X(...) X_RETURN_ARG1(InterlibType, __VA_ARGS__)
+ENUM_SWITCH_FUNCTION(const char* InterlibTypeName, InterlibType, ENUM_INTERLIB_TYPE_)
+#undef X
+
+#undef ENUM_SWITCH_FUNCTION
+#undef X_RETURN_ARG1
+#undef X_RETURN_ARG2
+#undef X_RETURN_ARG3
 
 fs::path InsideBox(const fs::path& box, const fs::path& path) {
   return "/" / path.lexically_relative(box);
 }
 
 bool MountTmpfs(const fs::path& path, long size_kib) {
+  spdlog::debug("Mount tmpfs on {}, size {}", path.c_str(), size_kib);
   return 0 == mount("tmpfs", path.c_str(), "tmpfs", 0,
                     ("size=" + std::to_string(size_kib) + 'k').c_str());
 }
 
 bool Umount(const fs::path& path) {
+  spdlog::debug("Umount {}", path.c_str());
   return 0 == umount(path.c_str());
 }
 
 bool CreateDirs(const fs::path& path, fs::perms perms) {
+  spdlog::debug("Create directories {}", path.c_str());
   std::error_code ec;
   fs::create_directories(path, ec);
   if (ec) return false;
@@ -91,6 +91,7 @@ bool CreateDirs(const fs::path& path, fs::perms perms) {
 }
 
 bool Move(const fs::path& from, const fs::path& to, fs::perms perms) {
+  spdlog::debug("Move file {} -> {}", from.c_str(), to.c_str());
   std::error_code ec;
   fs::rename(from, to, ec);
   if (ec) {
@@ -104,6 +105,7 @@ bool Move(const fs::path& from, const fs::path& to, fs::perms perms) {
 }
 
 bool Copy(const fs::path& from, const fs::path& to, fs::perms perms) {
+  spdlog::debug("Copy file {} -> {}", from.c_str(), to.c_str());
   std::error_code ec;
   fs::copy_file(from, to, ec);
   if (ec) return false;

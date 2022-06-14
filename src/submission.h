@@ -2,42 +2,70 @@
 #define SUBMISSION_H_
 
 #include <vector>
+
 #include <cjail/cjail.h>
 #include <nlohmann/json.hpp>
+#include "reporter.h"
 
 extern int max_parallel;
 
-enum class SpecJudgeType {
-  NORMAL,
-  SPECJUDGE_OLD,
-  SPECJUDGE_NEW,
+#define ENUM_SPECJUDGE_TYPE_ \
+  X(NORMAL) \
+  X(SPECJUDGE_OLD) \
+  X(SPECJUDGE_NEW)
+enum class SpecjudgeType {
+#define X(name) name,
+  ENUM_SPECJUDGE_TYPE_
+#undef X
 };
 
+#define ENUM_INTERLIB_TYPE_ \
+  X(NONE) \
+  X(INCLUDE)
+// TODO FEATURE(link): X(LINK)
 enum class InterlibType {
-  NONE,
-  INCLUDE,
-  // TODO FEATURE(link): LINK,
+#define X(name) name,
+  ENUM_INTERLIB_TYPE_
+#undef X
 };
 
+#define ENUM_COMPILER_ \
+  X(GCC_CPP_98, "c++98") \
+  X(GCC_CPP_11, "c++11") \
+  X(GCC_CPP_14, "c++14") \
+  X(GCC_CPP_17, "c++17") \
+  X(GCC_CPP_20, "c++20") \
+  X(GCC_C_90, "c90") \
+  X(GCC_C_98, "c98") \
+  X(GCC_C_11, "c11") \
+  X(HASKELL, "haskell") \
+  X(PYTHON2, "python2") \
+  X(PYTHON3, "python3")
 enum class Compiler {
-  GCC_CPP_98,
-  GCC_CPP_11,
-  GCC_CPP_14,
-  GCC_CPP_17,
-  GCC_CPP_20,
-  GCC_C_90,
-  GCC_C_98,
-  GCC_C_11,
-  HASKELL,
-  PYTHON2,
-  PYTHON3,
+#define X(name, compname) name,
+  ENUM_COMPILER_
+#undef X
 };
 
 // the max of every subtasks would be the final result
+#define ENUM_VERDICT_ \
+  X(NUL, "", "nil") \
+  /* verdicts after execution */ \
+  X(AC, "AC", "Accepted") \
+  X(WA, "WA", "Wrong Answer") \
+  X(TLE, "TLE", "Time Limit Exceeded") \
+  X(MLE, "MLE", "Memory Limit Exceeded") \
+  X(OLE, "OLE", "Output Limit Exceeded") \
+  X(RE, "RE", "Runtime Error (exited with nonzero status)") \
+  X(SIG, "SIG", "Runtime Error (exited with signal)") \
+  /* verdicts after compilation */ \
+  X(CE, "CE", "Compile Error") \
+  X(CLE, "CLE", "Compilation Limit Exceeded") \
+  X(ER, "ER", "WTF!")
 enum class Verdict {
-  NUL,
-  AC, WA, TLE, MLE, OLE, RE, SIG, // verdicts after execution
-  CE, CLE, ER, // verdicts after compilation
+#define X(name, abr, desc) name,
+  ENUM_VERDICT_
+#undef X
 };
 
 class Submission {
@@ -52,7 +80,7 @@ class Submission {
   Compiler lang;
   // problem information
   int problem_id;
-  SpecJudgeType specjudge_type;
+  SpecjudgeType specjudge_type;
   InterlibType interlib_type;
   Compiler specjudge_lang;
   bool sandbox_strict; // false for backward-compatability
@@ -75,15 +103,18 @@ class Submission {
   std::vector<TestdataResult> td_results;
   // overall result
   Verdict verdict;
-  std::string message;
+  std::string ce_message;
+  // result reporting
+  Reporter* reporter;
 
   Submission() :
       submission_id(0), submitter_id(0), submission_time(0),
-      specjudge_type(SpecJudgeType::NORMAL),
+      specjudge_type(SpecjudgeType::NORMAL),
       interlib_type(InterlibType::NONE),
       specjudge_lang(Compiler::GCC_CPP_17),
       sandbox_strict(false),
-      verdict(Verdict::NUL) {}
+      verdict(Verdict::NUL),
+      reporter(nullptr) {}
 
   nlohmann::json TestdataMeta(int subtask) const;
 };
