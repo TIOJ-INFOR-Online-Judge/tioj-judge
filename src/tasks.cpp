@@ -81,14 +81,18 @@ struct cjail_result RunCompile(const Submission& sub, const Task& task, int uid)
     case Compiler::GCC_C_98: [[fallthrough]];
     case Compiler::GCC_C_11:
       opt.command = GccCompileCommand(lang, input, output, sub.sandbox_strict); break;
-    case Compiler::HASKELL:
-      // TODO: check if ghc can work statically
-      opt.command = {"/usr/bin/env", "ghc", "-w", "-O", "-tmpdir", ".", "-o", output, input}; break;
+    case Compiler::HASKELL: {
+      opt.command = {"/usr/bin/env", "ghc", "-w", "-O", "-tmpdir", ".", "-o", output, input};
+      if (sub.sandbox_strict) {
+        opt.command.insert(opt.command.end(), {"-static", "-optl-pthread", "-optl-static"});
+      }
+      break;
+    }
     case Compiler::PYTHON2:
       opt.command = {"/usr/bin/env", "python2", "-m", "py_compile", input}; break;
     case Compiler::PYTHON3: {
       // note: we assume input & output name has no quotes here
-      std::string script = ("import py_compile;py_compile.compile\'\'\'" +
+      std::string script = ("import py_compile;py_compile.compile(\'\'\'" +
                             input + "\'\'\',\'\'\'" + output + "\'\'\')");
       opt.command = {"/usr/bin/env", "python3", "-c", script};
       break;
@@ -97,14 +101,16 @@ struct cjail_result RunCompile(const Submission& sub, const Task& task, int uid)
   }
   if (char* path = getenv("PATH")) opt.envs.push_back(std::string("PATH=") + path);
   opt.workdir = Workdir("/");
+  opt.fd_output = open(CompileBoxMessage(id, subtask).c_str(), O_WRONLY | O_APPEND | O_CREAT, 0666);
+  opt.fd_error = opt.fd_output;
   opt.uid = opt.gid = uid;
   opt.wall_time = 60L * 1'000'000;
   opt.rss = 2L * 1024 * 1024; // 2G
-  opt.proc_num = 5;
+  opt.proc_num = 10;
   opt.fsize = 1L * 1024 * 1024; // 1G
-  opt.dirs = {"/usr", "/lib", "/lib64", "/etc/alternatives", "/bin"};
-  // TODO: check if it works (mount /tmp??)
+  opt.dirs = {"/usr", "/var/lib", "/lib", "/lib64", "/etc/alternatives", "/bin"};
   return SandboxExec(opt);
+  // we don't need to close the opened files because the process is about to terminate
 }
 
 struct cjail_result RunExecute(const Submission& sub, const Task& task, int uid) {
@@ -117,7 +123,6 @@ struct cjail_result RunExecute(const Submission& sub, const Task& task, int uid)
   SandboxOptions opt;
   opt.boxdir = ExecuteBoxPath(id, subtask);
   opt.command = ExecuteCommand(sub.lang, program);
-  // TODO: check if python env works (python seems does not require PATH now?)
   opt.workdir = Workdir("/");
   opt.uid = opt.gid = uid;
   opt.wall_time = std::max(long(lim.time * 1.2), lim.time + 1'000'000);
@@ -128,10 +133,8 @@ struct cjail_result RunExecute(const Submission& sub, const Task& task, int uid)
   opt.fsize = lim.output;
   if (sub.sandbox_strict) {
     if (sub.lang == Compiler::PYTHON2 || sub.lang == Compiler::PYTHON3) {
-      // TODO: check if necessary
       opt.dirs = {"/usr", "/lib", "/lib64", "/etc/alternatives", "/bin"};
     }
-    // TODO: check haskell
     opt.fd_input = open(ExecuteBoxInput(id, subtask, sub.sandbox_strict).c_str(), O_RDONLY);
     opt.fd_output = open(ExecuteBoxOutput(id, subtask, sub.sandbox_strict).c_str(), O_WRONLY | O_CREAT, 0600);
     opt.error = "/dev/null";
@@ -149,7 +152,7 @@ struct cjail_result RunScoring(const Submission& sub, const Task& task, int uid)
   long id = sub.submission_internal_id;
   int subtask = task.subtask;
   spdlog::debug("Generating scoring settings: id={} subid={}, subtask={}", id, sub.submission_id, task.subtask);
-  std::string program = ScoringBoxProgram(-1, -1, sub.lang, true);
+  std::string program = ScoringBoxProgram(-1, -1, sub.specjudge_lang, true);
 
   SandboxOptions opt;
   opt.boxdir = ScoringBoxPath(id, subtask);
@@ -170,9 +173,9 @@ struct cjail_result RunScoring(const Submission& sub, const Task& task, int uid)
   opt.uid = opt.gid = uid;
   opt.wall_time = 60L * 1'000'000;
   opt.rss = 2L * 1024 * 1024; // 2G
-  opt.proc_num = 5;
+  opt.proc_num = 10;
   opt.fsize = 1L * 1024 * 1024; // 1G
-  opt.dirs = {"/usr", "/lib", "/lib64", "/etc/alternatives", "/bin"};
+  opt.dirs = {"/usr", "/var/lib", "/lib", "/lib64", "/etc/alternatives", "/bin"};
   return SandboxExec(opt);
 }
 

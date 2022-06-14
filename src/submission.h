@@ -58,6 +58,7 @@ enum class Compiler {
   X(OLE, "OLE", "Output Limit Exceeded") \
   X(RE, "RE", "Runtime Error (exited with nonzero status)") \
   X(SIG, "SIG", "Runtime Error (exited with signal)") \
+  X(EE, "EE", "Execution Error") \
   /* verdicts after compilation */ \
   X(CE, "CE", "Compile Error") \
   X(CLE, "CLE", "Compilation Limit Exceeded") \

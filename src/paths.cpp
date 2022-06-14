@@ -103,6 +103,9 @@ fs::path CompileBoxInterlib(long id, int problem_id, bool inside_box) {
   return Workdir(BoxRoot(CompileBoxPath(id, CompileSubtask::USERPROG), inside_box))
       / InterlibName(problem_id);
 }
+fs::path CompileBoxMessage(long id, CompileSubtask subtask, bool inside_box) {
+  return Workdir(BoxRoot(CompileBoxPath(id, subtask), inside_box)) / "message";
+}
 fs::path CompileBoxOutput(long id, CompileSubtask subtask, Compiler lang, bool inside_box) {
   return Workdir(BoxRoot(CompileBoxPath(id, subtask), inside_box))
       / CompileResultName(subtask, lang);

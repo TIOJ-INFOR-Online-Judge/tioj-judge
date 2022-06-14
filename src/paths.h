@@ -23,6 +23,7 @@ std::filesystem::path CompileBoxInput(long id, CompileSubtask subtask, Compiler 
 std::filesystem::path CompileBoxInterlib(long id, int problem_id, bool inside_box = false);
 // TODO FEATURE(link): CompileBoxInterlibImpl
 std::filesystem::path CompileBoxOutput(long id, CompileSubtask subtask, Compiler lang, bool inside_box = false);
+std::filesystem::path CompileBoxMessage(long id, CompileSubtask subtask, bool inside_box = false);
 std::filesystem::path ExecuteBoxPath(long id, int td);
 std::filesystem::path ExecuteBoxProgram(long id, int td, Compiler lang, bool inside_box = false);
 std::filesystem::perms ExecuteBoxProgramPerm(Compiler lang, bool strict);

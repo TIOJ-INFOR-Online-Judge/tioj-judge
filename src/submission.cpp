@@ -162,7 +162,15 @@ void FinalizeCompile(Submission& sub, const TaskEntry& task, const struct cjail_
     spdlog::info("Compilation failed: id={} subtask={} verdict={}",
                  id, CompileSubtaskName(subtask), VerdictToAbr(sub.verdict));
     if (subtask == CompileSubtask::USERPROG) {
-      // TODO: read/filter compile error message to sub.message
+      fs::path path = CompileBoxMessage(id, subtask);
+      if (fs::is_regular_file(path)) {
+        char buf[4096];
+        std::ifstream fin(path);
+        fin.read(buf, sizeof(buf));
+        sub.ce_message.assign(buf, fin.gcount());
+        spdlog::debug("Message: {}", sub.ce_message);
+        // TODO: filter compile error message
+      }
       if (sub.reporter) sub.reporter->ReportCEMessage(sub);
     }
   } else {
@@ -219,7 +227,9 @@ void FinalizeExecute(Submission& sub, const TaskEntry& task, const struct cjail_
   td_result.rss = res.rus.ru_maxrss;
   td_result.time = ToUs(res.rus.ru_utime) + ToUs(res.rus.ru_utime);
   td_result.score = 0;
-  if (res.oomkill) {
+  if (res.timekill == -1) {
+    td_result.verdict = Verdict::EE;
+  } else if (res.oomkill) {
     td_result.verdict = Verdict::MLE;
   } else if (res.timekill) {
     td_result.verdict = Verdict::TLE;
@@ -349,7 +359,6 @@ void FinalizeSubmission(Submission& sub, const TaskEntry& task) {
   long id = sub.submission_internal_id;
   RemoveAll(SubmissionCodePath(id));
   RemoveAll(SubmissionRunPath(id));
-  // TODO: set overall verdict
   if (sub.td_results.size()) {
     sub.verdict = (Verdict)std::max((int)sub.verdict,
         (int)std::max_element(sub.td_results.begin(), sub.td_results.end(),
