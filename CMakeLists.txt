@@ -7,53 +7,56 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
 
-# build submodule dependencies
-find_package(Git QUIET)
-if(GIT_FOUND AND EXISTS "${PROJECT_SOURCE_DIR}/.git")
-  message(STATUS "Submodule update")
-  execute_process(COMMAND ${GIT_EXECUTABLE} submodule update --init --recursive
-                  WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-                  RESULT_VARIABLE GIT_SUBMOD_RESULT)
-  if(NOT GIT_SUBMOD_RESULT EQUAL "0")
-    message(FATAL_ERROR "git submodule update --init --recursive failed with ${GIT_SUBMOD_RESULT}, please checkout submodules")
-  endif()
-endif()
-if(NOT EXISTS "${PROJECT_SOURCE_DIR}/deps/cjail/CMakeLists.txt")
-  message(FATAL_ERROR "The submodules were not downloaded! Please update submodules and try again.")
-endif()
-
-# submodules
+## setup dependencies
 set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
 set(CJAIL_BUILD_TESTS OFF)
-add_subdirectory("${PROJECT_SOURCE_DIR}/deps/cjail" EXCLUDE_FROM_ALL)
-add_subdirectory("${PROJECT_SOURCE_DIR}/deps/spdlog" EXCLUDE_FROM_ALL)
-add_subdirectory("${PROJECT_SOURCE_DIR}/deps/fmt" EXCLUDE_FROM_ALL)
+
+include(FetchContent)
+FetchContent_Declare(
+  cjail
+  GIT_REPOSITORY "https://github.com/adrien1018/cjail.git"
+  GIT_TAG "6c2147f2dfe475c3a8dc1c119490cb55cf77e5a7"
+)
+FetchContent_Declare(
+  spdlog
+  URL "https://github.com/gabime/spdlog/archive/refs/tags/v1.10.0.zip"
+)
+FetchContent_Declare(
+  fmt
+  URL "https://github.com/fmtlib/fmt/archive/refs/tags/8.1.1.zip"
+)
+FetchContent_Declare(
+  json
+  URL "https://github.com/nlohmann/json/archive/refs/tags/v3.10.5.zip"
+)
+FetchContent_MakeAvailable(cjail spdlog fmt json)
 
 # default scoring
 add_executable(default-scoring "tools/default-scoring.cpp")
-target_include_directories(default-scoring PRIVATE "deps/json/include")
+target_link_libraries(default-scoring nlohmann_json::nlohmann_json)
 
 # judge
 file(GLOB JUDGE_SRC "src/*.cpp" "src/*.h")
-file(GLOB DEPS_INCLUDE "deps/*/include")
-set(JUDGE_LIBS libcjail spdlog::spdlog fmt::fmt)
+set(JUDGE_LIBS nlohmann_json::nlohmann_json CJail::libcjail spdlog::spdlog fmt::fmt)
 add_executable(judge ${JUDGE_SRC})
-target_include_directories(judge PRIVATE ${DEPS_INCLUDE})
 target_link_libraries(judge ${JUDGE_LIBS})
 
 # testing
-include(FetchContent)
-FetchContent_Declare(
-  googletest
-  URL https://github.com/google/googletest/archive/609281088cfefc76f9d0ce82e1ff6c30cc3591e5.zip
-)
-set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-FetchContent_MakeAvailable(googletest)
+option(TIOJ_BUILD_TESTS "Build test programs" ON)
 
-file(GLOB TEST_SRC "test/*.cpp" "test/*.h")
-add_executable(judge-test ${TEST_SRC} ${JUDGE_SRC})
-target_link_libraries(judge-test gtest_main ${JUDGE_LIBS})
-target_include_directories(judge-test PRIVATE ${DEPS_INCLUDE} "src")
+if(TIOJ_BUILD_TESTS)
+  FetchContent_Declare(
+    googletest
+    URL "https://github.com/google/googletest/archive/refs/tags/release-1.11.0.zip"
+  )
+  set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
+  FetchContent_MakeAvailable(googletest)
 
-include(GoogleTest)
-gtest_discover_tests(judge-test)
+  file(GLOB TEST_SRC "test/*.cpp" "test/*.h")
+  add_executable(judge-test ${TEST_SRC} ${JUDGE_SRC})
+  target_link_libraries(judge-test gtest_main ${JUDGE_LIBS})
+  target_include_directories(judge-test PRIVATE ${DEPS_INCLUDE} "src")
+
+  include(GoogleTest)
+  gtest_discover_tests(judge-test)
+endif()
