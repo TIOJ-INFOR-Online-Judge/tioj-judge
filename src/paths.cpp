@@ -1,11 +1,8 @@
 #include "paths.h"
 
-namespace fs = std::filesystem;
-
-const fs::path kBoxRoot = "/tmp/tioj_box";
-const fs::path kTestdataRoot = "./testdata"; // TODO FEATURE(config)
-const fs::path kSubmissionRoot = "/tmp/submissions";
-const fs::path kDefaultScoringProgram = "./build/default-scoring"; // TODO FEATURE(config)
+fs::path kBoxRoot = "/tmp/tioj_box";
+fs::path kSubmissionRoot = "/tmp/tioj_submissions";
+fs::path kDataDir = fs::path(TIOJ_DATA_DIR);
 
 const char kWorkdirRelative[] = "workdir";
 fs::path Workdir(fs::path&& path) {
@@ -189,8 +186,11 @@ fs::path ScoringBoxOutput(long id, int td, bool inside_box) {
   return Workdir(BoxRoot(ScoringBoxPath(id, td), inside_box)) / "output";
 }
 
+fs::path TdRoot() {
+  return kDataDir / "testdata";
+}
 fs::path TdPath(int prob) {
-  return kTestdataRoot / PadInt(prob, 4);
+  return TdRoot() / PadInt(prob, 4);
 }
 fs::path TdMeta(int prob, int td) {
   return TdPath(prob) / ("input" + PadInt(td, 3) + ".meta");
@@ -200,6 +200,9 @@ fs::path TdInput(int prob, int td) {
 }
 fs::path TdOutput(int prob, int td) {
   return TdPath(prob) / ("output" + PadInt(td, 3));
+}
+fs::path DefaultScoringPath() {
+  return kDataDir / "default-scoring";
 }
 
 fs::path SubmissionCodePath(int id) {

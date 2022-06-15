@@ -269,7 +269,7 @@ bool SetupScoring(const Submission& sub, const TaskEntry& task) {
   Copy(SubmissionUserCode(id), ScoringBoxCode(id, subtask, sub.lang), kPerm666);
   // special judge program
   fs::path specjudge_prog = sub.specjudge_type == SpecjudgeType::NORMAL ?
-      kDefaultScoringProgram : CompileBoxOutput(id, CompileSubtask::SPECJUDGE, sub.specjudge_lang);
+      DefaultScoringPath() : CompileBoxOutput(id, CompileSubtask::SPECJUDGE, sub.specjudge_lang);
   Copy(specjudge_prog, ScoringBoxProgram(id, subtask, sub.specjudge_lang), fs::perms::all);
   { // write meta file
     std::ofstream fout(ScoringBoxMetaFile(id, subtask));
