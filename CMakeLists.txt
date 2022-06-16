@@ -1,11 +1,16 @@
 cmake_minimum_required(VERSION 3.10)
 
 project(tioj_judge VERSION 0.1 LANGUAGES CXX)
+set(SOVERSION 0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
+
+# options
+option(BUILD_SHARED_LIBS "Build using shared libraries" OFF)
+option(TIOJ_BUILD_TESTS "Build test programs" ON)
 
 # configs
 set(TIOJ_DATA_DIR "/var/lib/tioj-judge/" CACHE PATH "Path of default testdata & scoring program location")
@@ -14,13 +19,17 @@ add_compile_definitions(TIOJ_DATA_DIR="${TIOJ_DATA_DIR}")
 
 # setup dependencies
 set(CMAKE_POLICY_DEFAULT_CMP0077 NEW)
+set(CJAIL_BUILD_CLI OFF)
 set(CJAIL_BUILD_TESTS OFF)
+set(HTTPLIB_REQUIRE_OPENSSL ON)
+set(HTTPLIB_REQUIRE_ZLIB ON)
+set(JSON_MultipleHeaders ON)
 
 include(FetchContent)
 FetchContent_Declare(
   cjail
   GIT_REPOSITORY "https://github.com/adrien1018/cjail.git"
-  GIT_TAG "6c2147f2dfe475c3a8dc1c119490cb55cf77e5a7"
+  GIT_TAG "7cd2ae7e81fc5623b1bfdb7a882ac907337b2997"
 )
 FetchContent_Declare(
   spdlog
@@ -46,16 +55,18 @@ add_executable(default-scoring "tools/default-scoring.cpp")
 target_link_libraries(default-scoring nlohmann_json::nlohmann_json)
 install(TARGETS default-scoring DESTINATION "${TIOJ_DATA_DIR}/")
 
+# library
+# required for any program that uses libtioj
+set(TIOJ_DEPS nlohmann_json::nlohmann_json CJail::libcjail)
+add_subdirectory(src)
+
 # judge
 file(GLOB JUDGE_SRC "src/*.cpp" "src/*.h")
-set(JUDGE_LIBS nlohmann_json::nlohmann_json CJail::libcjail spdlog::spdlog fmt::fmt tortellini)
 add_executable(judge ${JUDGE_SRC})
-target_link_libraries(judge ${JUDGE_LIBS})
+target_link_libraries(judge libtioj ${TIOJ_DEPS} spdlog::spdlog tortellini)
 install(TARGETS judge DESTINATION bin)
 
 # testing
-option(TIOJ_BUILD_TESTS "Build test programs" ON)
-
 if(TIOJ_BUILD_TESTS)
   enable_testing()
   FetchContent_Declare(
@@ -66,9 +77,8 @@ if(TIOJ_BUILD_TESTS)
   FetchContent_MakeAvailable(googletest)
 
   file(GLOB TEST_SRC "test/*.cpp" "test/*.h")
-  add_executable(judge-test ${TEST_SRC} ${JUDGE_SRC})
-  target_link_libraries(judge-test gtest_main ${JUDGE_LIBS})
-  target_include_directories(judge-test PRIVATE ${DEPS_INCLUDE} "src")
+  add_executable(judge-test ${TEST_SRC})
+  target_link_libraries(judge-test gtest_main libtioj ${TIOJ_DEPS} spdlog::spdlog)
 
   include(GoogleTest)
   gtest_discover_tests(judge-test)

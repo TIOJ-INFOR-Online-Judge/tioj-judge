@@ -1,16 +1,10 @@
 #ifndef PATHS_H_
 #define PATHS_H_
 
-#include <filesystem>
-#include <string>
+#include <tioj/paths.h>
 
 #include "tasks.h"
-
-namespace fs = std::filesystem;
-
-extern fs::path kBoxRoot;
-extern fs::path kSubmissionRoot;
-extern fs::path kDataDir;
+#include "submission.h"
 
 extern const char kWorkdirRelative[];
 fs::path Workdir(fs::path&&);
@@ -43,19 +37,5 @@ fs::path ScoringBoxTdInput(long id, int td, bool inside_box = false);
 fs::path ScoringBoxTdOutput(long id, int td, bool inside_box = false);
 fs::path ScoringBoxMetaFile(long id, int td, bool inside_box = false);
 fs::path ScoringBoxOutput(long id, int td, bool inside_box = false);
-
-// for testdata download
-fs::path TdRoot();
-fs::path TdPath(int prob);
-fs::path TdMeta(int prob, int td);
-fs::path TdInput(int prob, int td);
-fs::path TdOutput(int prob, int td);
-fs::path DefaultScoringPath();
-
-// for submission fetch
-fs::path SubmissionCodePath(int id);
-fs::path SubmissionUserCode(int id);
-fs::path SubmissionJudgeCode(int id);
-fs::path SubmissionInterlibCode(int id);
 
 #endif  // PATHS_H_

@@ -1,13 +1,14 @@
-#ifndef SUBMISSION_H_
-#define SUBMISSION_H_
+#ifndef TIOJ_SUBMISSION_H_
+#define TIOJ_SUBMISSION_H_
 
+#include <string>
 #include <vector>
 
 #include <cjail/cjail.h>
-#include <nlohmann/json.hpp>
+#include <nlohmann/json_fwd.hpp>
 #include "reporter.h"
 
-extern int max_parallel;
+extern int kMaxParallel;
 
 #define ENUM_SPECJUDGE_TYPE_ \
   X(NORMAL) \
@@ -125,4 +126,4 @@ void WorkLoop(bool loop = true);
 // Called from another thread
 void PushSubmission(Submission&&);
 
-#endif  // SUBMISSION_H_
+#endif  // TIOJ_SUBMISSION_H_

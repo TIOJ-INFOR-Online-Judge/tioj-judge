@@ -3,22 +3,11 @@
 
 #include <filesystem>
 
-#include "tasks.h"
-#include "submission.h"
+#include <tioj/utils.h>
 
 namespace fs = std::filesystem;
 
 #define IGNORE_RETURN(x) { auto _ __attribute__((unused)) = x; }
-
-const char* VerdictToDesc(Verdict);
-const char* VerdictToAbr(Verdict);
-Verdict AbrToVerdict(const std::string&, bool runtime_only);
-// logging
-const char* CompilerName(Compiler);
-const char* TaskTypeName(TaskType);
-const char* CompileSubtaskName(CompileSubtask);
-const char* SpecjudgeTypeName(SpecjudgeType);
-const char* InterlibTypeName(InterlibType);
 
 constexpr fs::perms kPerm666 =
     fs::perms::owner_read | fs::perms::owner_write |

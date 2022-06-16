@@ -1,12 +1,11 @@
 #include "example_problem.h"
 
 #include <fstream>
-#include <paths.h>
-#include <utils.h>
+#include <tioj/paths.h>
 
 void ExampleProblem::SetUp(int problem_id_, int td_num, bool sandbox_strict) {
   problem_id = problem_id_;
-  CreateDirs(TdPath(problem_id));
+  fs::create_directories(TdPath(problem_id));
   for (int i = 0; i < td_num; i++) {
     std::ofstream f1(TdInput(problem_id, i)), f2(TdOutput(problem_id, i));
     f1 << i << std::endl;
@@ -18,5 +17,5 @@ void ExampleProblem::SetUp(int problem_id_, int td_num, bool sandbox_strict) {
 }
 
 void ExampleProblem::TearDown() {
-  RemoveAll(TdPath(problem_id));
+  fs::remove_all(TdPath(problem_id));
 }

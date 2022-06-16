@@ -10,11 +10,12 @@
 #include <condition_variable>
 
 #include <spdlog/spdlog.h>
+#include <nlohmann/json.hpp>
 #include "tasks.h"
 #include "utils.h"
 #include "paths.h"
 
-int max_parallel = 1;
+int kMaxParallel = 1;
 
 namespace {
 
@@ -430,7 +431,7 @@ void WorkLoop(bool loop) {
     task_cv.wait(lck, []{ return !task_queue.empty(); });
     int task_running = 0;
     while (task_running || !task_queue.empty()) {
-      if (task_running < max_parallel && task_queue.size()) {
+      if (task_running < kMaxParallel && task_queue.size()) {
         long tid = task_queue.top();
         task_queue.pop();
         task_running += DispatchTask(tid);

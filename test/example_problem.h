@@ -2,7 +2,7 @@
 #define EXAMPLE_PROBLEM_H_
 
 #include <gtest/gtest.h>
-#include <submission.h>
+#include <tioj/submission.h>
 
 class ExampleProblem : public ::testing::Test {
  protected:

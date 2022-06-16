@@ -1,7 +1,6 @@
 #include <gtest/gtest.h>
 #include <spdlog/spdlog.h>
-#include <paths.h>
-#include <utils.h>
+#include <tioj/paths.h>
 
 class MyEnvironment : public ::testing::Environment {
  public:
@@ -10,8 +9,8 @@ class MyEnvironment : public ::testing::Environment {
     spdlog::set_level(spdlog::level::debug);
   }
   void TearDown() override {
-    RemoveAll(TdRoot());
-    RemoveAll(kSubmissionRoot);
+    fs::remove_all(TdRoot());
+    fs::remove_all(kSubmissionRoot);
   }
 };
 

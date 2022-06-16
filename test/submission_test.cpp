@@ -2,9 +2,9 @@
 
 #include <fstream>
 #include <algorithm>
-#include <paths.h>
-#include <utils.h>
-#include <submission.h>
+#include <tioj/paths.h>
+#include <tioj/submission.h>
+#include <tioj/utils.h>
 
 long SetupSubmission(Submission& sub, int id, Compiler lang, long time, const std::string& code) {
   static int sub_id = 0;
@@ -13,14 +13,14 @@ long SetupSubmission(Submission& sub, int id, Compiler lang, long time, const st
   sub.submitter_id = 10;
   sub.submission_time = time;
   sub.lang = lang;
-  CreateDirs(SubmissionCodePath(iid));
+  fs::create_directories(SubmissionCodePath(iid));
   std::ofstream fout(SubmissionUserCode(iid));
   fout << code;
   return iid;
 }
 
 void TeardownSubmission(long id) {
-  RemoveAll(SubmissionCodePath(id));
+  fs::remove_all(SubmissionCodePath(id));
 }
 
 constexpr long kTime = 1655000000;
@@ -44,7 +44,7 @@ std::string ParamName(const ::testing::TestParamInfo<SubParam>& info) {
 class ExampleProblemOneSubmission : public ExampleProblem, public testing::WithParamInterface<SubParam> {};
 TEST_P(ExampleProblemOneSubmission, Sub) {
   auto& param = GetParam();
-  max_parallel = param.parallel;
+  kMaxParallel = param.parallel;
   SetUp(param.sub_id, 5, param.is_strict);
   long id = SetupSubmission(sub, 1, param.lang, kTime, param.code);
   PushSubmission(std::move(sub));

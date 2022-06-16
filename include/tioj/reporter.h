@@ -1,5 +1,5 @@
-#ifndef REPORTER_H_
-#define REPORTER_H_
+#ifndef TIOJ_REPORTER_H_
+#define TIOJ_REPORTER_H_
 
 class Submission;
 
@@ -11,4 +11,4 @@ class Reporter {
   virtual void ReportCEMessage(const Submission&) = 0;
 };
 
-#endif  // REPORTER_H_
+#endif  // TIOJ_REPORTER_H_
