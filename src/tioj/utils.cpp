@@ -115,8 +115,9 @@ bool Move(const fs::path& from, const fs::path& to, fs::perms perms) {
   fs::rename(from, to, ec);
   if (ec) {
     if (ec.value() != EXDEV) goto err;
-    fs::copy(from, to, fs::copy_options::overwrite_existing, ec);
+    fs::copy_file(from, to, fs::copy_options::overwrite_existing, ec);
     if (ec) goto err;
+    fs::remove(from, ec);
   }
   if (perms == fs::perms::unknown) return true;
   fs::permissions(to, perms, ec);
@@ -130,7 +131,7 @@ err:
 bool Copy(const fs::path& from, const fs::path& to, fs::perms perms) {
   spdlog::debug("Copy file {} -> {}", from.c_str(), to.c_str());
   std::error_code ec;
-  fs::copy(from, to, fs::copy_options::overwrite_existing, ec);
+  fs::copy_file(from, to, fs::copy_options::overwrite_existing, ec);
   if (ec) goto err;
   if (perms == fs::perms::unknown) return true;
   fs::permissions(to, perms, ec);

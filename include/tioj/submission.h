@@ -101,6 +101,7 @@ class Submission {
     int64_t time; // us
     int64_t score; // 10^(-6)
     Verdict verdict;
+    TestdataResult() : execute_result{}, vss{}, rss{}, time{}, score{}, verdict(Verdict::NUL) {}
   };
   std::vector<TestdataResult> td_results;
   // overall result

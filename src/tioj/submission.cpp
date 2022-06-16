@@ -125,6 +125,7 @@ inline void Remove(const TaskEntry& task) {
 
 /// Task env setup
 bool SetupCompile(const Submission& sub, const TaskEntry& task) {
+  if (sub.reporter) sub.reporter->ReportStartCompiling(sub);
   long id = sub.submission_internal_id;
   CompileSubtask subtask = (CompileSubtask)task.task.subtask;
   CreateDirs(Workdir(CompileBoxPath(id, subtask)), fs::perms::all);
@@ -199,12 +200,18 @@ bool SetupExecute(const Submission& sub, const TaskEntry& task) {
        prog, ExecuteBoxProgramPerm(sub.lang, sub.sandbox_strict));
   if (sub.sandbox_strict) {
     CreateDirs(ExecuteBoxTdStrictPath(id, subtask), fs::perms::owner_all); // 700
-    Copy(TdInput(sub.problem_id, subtask), ExecuteBoxInput(id, subtask, sub.sandbox_strict),
-        fs::perms::owner_read | fs::perms::owner_write); // 600
+    {
+      std::lock_guard lck(td_file_lock[sub.problem_id]);
+      Copy(TdInput(sub.problem_id, subtask), ExecuteBoxInput(id, subtask, sub.sandbox_strict),
+          fs::perms::owner_read | fs::perms::owner_write); // 600
+    }
     fs::permissions(prog, fs::perms::all & ~(fs::perms::group_write)); // 755
   } else {
     fs::permissions(workdir, fs::perms::all);
-    Copy(TdInput(sub.problem_id, subtask), ExecuteBoxInput(id, subtask, sub.sandbox_strict), kPerm666);
+    {
+      std::lock_guard lck(td_file_lock[sub.problem_id]);
+      Copy(TdInput(sub.problem_id, subtask), ExecuteBoxInput(id, subtask, sub.sandbox_strict), kPerm666);
+    }
     fs::permissions(prog, fs::perms::all); // 777
   }
   return true;
@@ -265,8 +272,11 @@ bool SetupScoring(const Submission& sub, const TaskEntry& task) {
   CreateDirs(Workdir(ScoringBoxPath(id, subtask)), fs::perms::all);
   Move(ExecuteBoxFinalOutput(id, subtask),
        ScoringBoxUserOutput(id, subtask), kPerm666);
-  Copy(TdInput(sub.problem_id, subtask), ScoringBoxTdInput(id, subtask), kPerm666);
-  Copy(TdOutput(sub.problem_id, subtask), ScoringBoxTdOutput(id, subtask), kPerm666);
+  {
+    std::lock_guard lck(td_file_lock[sub.problem_id]);
+    Copy(TdInput(sub.problem_id, subtask), ScoringBoxTdInput(id, subtask), kPerm666);
+    Copy(TdOutput(sub.problem_id, subtask), ScoringBoxTdOutput(id, subtask), kPerm666);
+  }
   Copy(SubmissionUserCode(id), ScoringBoxCode(id, subtask, sub.lang), kPerm666);
   // special judge program
   fs::path specjudge_prog = sub.specjudge_type == SpecjudgeType::NORMAL ?
@@ -469,7 +479,7 @@ void PushSubmission(Submission&& sub) {
     Link(executes.back(), scorings.back());
     Link(scorings.back(), finalize);
   }
-  std::lock_guard<std::mutex> lck(task_mtx);
+  std::lock_guard lck(task_mtx);
   {
     TaskEntry compile(id, {TaskType::COMPILE, (int)CompileSubtask::USERPROG}, priority);
     for (auto& i : executes) Link(compile, i);

@@ -23,6 +23,7 @@ set(CJAIL_BUILD_CLI OFF)
 set(CJAIL_BUILD_TESTS OFF)
 set(HTTPLIB_REQUIRE_OPENSSL ON)
 set(HTTPLIB_REQUIRE_ZLIB ON)
+set(HTTPLIB_COMPILE ON)
 set(JSON_MultipleHeaders ON)
 
 include(FetchContent)
@@ -48,7 +49,15 @@ FetchContent_Declare(
   GIT_REPOSITORY "https://github.com/Qix-/tortellini.git"
   GIT_TAG "0c9a2b79f6580d44bd7606f30668a5e0ba8326ae"
 )
-FetchContent_MakeAvailable(cjail spdlog fmt json ini)
+FetchContent_Declare(
+  httplib
+  URL "https://github.com/yhirose/cpp-httplib/archive/refs/tags/v0.10.8.zip"
+)
+FetchContent_Declare(
+  sqlite_orm
+  URL "https://github.com/fnc12/sqlite_orm/archive/refs/tags/v1.7.1.zip"
+)
+FetchContent_MakeAvailable(cjail spdlog fmt json ini httplib sqlite_orm)
 
 # default scoring
 add_executable(default-scoring "tools/default-scoring.cpp")
@@ -63,7 +72,7 @@ add_subdirectory(src)
 # judge
 file(GLOB JUDGE_SRC "src/*.cpp" "src/*.h")
 add_executable(judge ${JUDGE_SRC})
-target_link_libraries(judge libtioj ${TIOJ_DEPS} spdlog::spdlog tortellini)
+target_link_libraries(judge libtioj ${TIOJ_DEPS} spdlog::spdlog fmt::fmt tortellini httplib::httplib sqlite_orm::sqlite_orm)
 install(TARGETS judge DESTINATION bin)
 
 # testing

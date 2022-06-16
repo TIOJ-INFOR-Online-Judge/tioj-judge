@@ -186,6 +186,12 @@ fs::path ScoringBoxOutput(long id, int td, bool inside_box) {
   return Workdir(BoxRoot(ScoringBoxPath(id, td), inside_box)) / "output";
 }
 
+std::mutex& TdFileLock::operator[](int id) {
+  std::lock_guard lck(global_lock_);
+  return mutex_map_[id];
+}
+TdFileLock td_file_lock;
+
 fs::path TdRoot() {
   return kDataDir / "testdata";
 }
