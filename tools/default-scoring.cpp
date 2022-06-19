@@ -4,6 +4,7 @@
 #include <nlohmann/json.hpp>
 
 int main(int argc, char** argv) {
+  // TODO FEATURE(scoring-style): Add different scoring style such as strict compare & numerical compare
   nlohmann::json json;
   {
     std::ifstream fin(argv[1]);

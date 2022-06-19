@@ -4,11 +4,16 @@
 #include "tasks.h"
 #include "submission.h"
 
+long GetUniqueSubmissionInternalId();
+
 const char* VerdictToDesc(Verdict);
 const char* VerdictToAbr(Verdict);
 Verdict AbrToVerdict(const std::string&, bool runtime_only);
-// logging
+
 const char* CompilerName(Compiler);
+Compiler GetCompiler(const std::string&);
+
+// logging
 const char* TaskTypeName(TaskType);
 const char* CompileSubtaskName(CompileSubtask);
 const char* SpecjudgeTypeName(SpecjudgeType);

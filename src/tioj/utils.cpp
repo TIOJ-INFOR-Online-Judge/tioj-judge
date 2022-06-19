@@ -1,8 +1,19 @@
 #include "utils.h"
 
 #include <sys/mount.h>
+#include <atomic>
 
 #include <spdlog/spdlog.h>
+
+namespace {
+
+std::atomic_long submission_internal_id_seq = 0;
+
+} // namespace
+
+long GetUniqueSubmissionInternalId() {
+  return ++submission_internal_id_seq;
+}
 
 #define ENUM_SWITCH_FUNCTION(DEF, typ, mac) \
   DEF(typ param) { \
@@ -40,9 +51,22 @@ Verdict AbrToVerdict(const std::string& str, bool runtime_only) {
   return Verdict::NUL;
 }
 
-#define X(...) X_RETURN_ARG2(Compiler, __VA_ARGS__)
-ENUM_SWITCH_FUNCTION(const char* CompilerName, Compiler, ENUM_COMPILER_)
+static const char* kCompilerNameTable[] = {
+#define X(name, abr) abr,
+  ENUM_COMPILER_
 #undef X
+};
+
+const char* CompilerName(Compiler compiler) {
+  return kCompilerNameTable[(int)compiler];
+}
+
+Compiler GetCompiler(const std::string& str) {
+  for (size_t i = 0; i < sizeof(kCompilerNameTable) / sizeof(kCompilerNameTable[0]); i++) {
+    if (str == kCompilerNameTable[i]) return (Compiler)i;
+  }
+  return Compiler::GCC_CPP_14;
+}
 
 #define X(...) X_RETURN_ARG1(TaskType, __VA_ARGS__)
 ENUM_SWITCH_FUNCTION(const char* TaskTypeName, TaskType, ENUM_TASK_TYPE_)
