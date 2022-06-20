@@ -244,7 +244,7 @@ int RunTask(const Submission& sub, const Task& task) {
       case TaskType::FINALIZE: __builtin_unreachable();
     }
     IGNORE_RETURN(write(pipefd[1], &ret, sizeof(struct cjail_result)));
-    exit(0);
+    _exit(0); // since forked, some atexit() may hang by deadlocks
   }
   close(pipefd[1]);
   running[pipefd[0]] = {pid, uid};

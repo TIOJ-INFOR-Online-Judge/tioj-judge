@@ -79,8 +79,8 @@ struct TaskEntry {
       indeg(0) {}
   bool operator>(const TaskEntry& x) const {
     // TODO FEATURE(group): order by group_offset first
-    return std::make_tuple(priority, -submission_internal_id, task.subtask) >
-           std::make_tuple(x.priority, -x.submission_internal_id, x.task.subtask);
+    return std::make_tuple(priority, submission_internal_id, task.subtask) >
+           std::make_tuple(x.priority, x.submission_internal_id, x.task.subtask);
   }
 };
 long TaskEntry::task_count = 0;
@@ -154,9 +154,9 @@ bool SetupCompile(const Submission& sub, const TaskEntry& task) {
 void FinalizeCompile(Submission& sub, const TaskEntry& task, const struct cjail_result& res) {
   long id = sub.submission_internal_id;
   CompileSubtask subtask = (CompileSubtask)task.task.subtask;
-  if (res.timekill || res.oomkill || res.info.si_status != 0 ||
+  if (res.timekill || res.oomkill > 0 || res.info.si_status != 0 ||
       !fs::is_regular_file(CompileBoxOutput(id, subtask, sub.lang))) {
-    if (res.timekill || res.oomkill) {
+    if (res.timekill || res.oomkill > 0) {
       sub.verdict = subtask == CompileSubtask::USERPROG ? Verdict::CLE : Verdict::ER;
     } else {
       sub.verdict = subtask == CompileSubtask::USERPROG ? Verdict::CE : Verdict::ER;
@@ -233,11 +233,11 @@ void FinalizeExecute(Submission& sub, const TaskEntry& task, const struct cjail_
   auto& lim = sub.td_limits[subtask];
   td_result.vss = res.stats.hiwater_vm;
   td_result.rss = res.rus.ru_maxrss;
-  td_result.time = ToUs(res.rus.ru_utime) + ToUs(res.rus.ru_utime);
+  td_result.time = ToUs(res.rus.ru_utime) + ToUs(res.rus.ru_stime);
   td_result.score = 0;
   if (res.timekill == -1) {
     td_result.verdict = Verdict::EE;
-  } else if (res.oomkill) {
+  } else if (res.oomkill > 0) {
     td_result.verdict = Verdict::MLE;
   } else if (res.timekill) {
     td_result.verdict = Verdict::TLE;
@@ -479,7 +479,7 @@ void PushSubmission(Submission&& sub) {
     Link(executes.back(), scorings.back());
     Link(scorings.back(), finalize);
   }
-  std::lock_guard lck(task_mtx);
+  std::unique_lock lck(task_mtx);
   {
     TaskEntry compile(id, {TaskType::COMPILE, (int)CompileSubtask::USERPROG}, priority);
     for (auto& i : executes) Link(compile, i);
@@ -503,4 +503,6 @@ void PushSubmission(Submission&& sub) {
     it.first->second = id;
   }
   spdlog::info("Submission enqueued: id={} sub_id={} prob_id={}", id, sub.submission_id, sub.problem_id);
+  lck.unlock();
+  task_cv.notify_one();
 }

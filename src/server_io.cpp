@@ -77,7 +77,7 @@ struct Request {
 using ParItem = httplib::Params::value_type;
 
 void DoRequest(const Request& req) {
-  httplib::SSLClient cli(kTIOJUrl);
+  httplib::Client cli(kTIOJUrl);
   if (req.is_post) {
     if (req.use_body) {
       RequestRetry<HTTPPost>(cli, req.endpoint, req.body.c_str(), req.format.c_str());
@@ -147,19 +147,42 @@ inline auto DownloadFile(const fs::path& path, T&&... params) {
       reciever);
 }
 
+httplib::Params AddKey(httplib::Params&& params) {
+  params.insert({"key", kTIOJKey});
+  return params;
+}
+
+class TempDirectory { // RAII tempdir
+  fs::path path_;
+ public:
+  const fs::path& Path() const { return path_; }
+  fs::path UserCodePath() const { return path_ / "code"; }
+  fs::path SpecjudgePath() const { return path_ / "sjcode"; }
+  fs::path InterlibPath() const { return path_ / "interlib"; }
+  TempDirectory() {
+    char path[] = "/tmp/tmpsub.XXXXXX";
+    char* res = mkdtemp(path);
+    if (res) path_ = res;
+  }
+  ~TempDirectory() {
+    if (!path_.empty()) fs::remove_all(path_);
+  }
+};
+
 } // namespace
 
 bool FetchOneSubmission() {
+  using namespace httplib;
   using namespace sqlite_orm;
 
   if (!db) db = std::make_unique<Storage>(InitDatabase());
-  httplib::SSLClient cli(kTIOJUrl);
+  Client cli(kTIOJUrl);
   // fetch submission
-  auto res = RequestRetry<HTTPGet>(cli, "submission");
+  auto res = RequestRetry<HTTPGet>(cli, "/fetch/submission", AddKey({}), Headers());
   if (!res) return false;
   Submission sub;
   {
-    std::stringstream ss(res.value()->body);
+    std::stringstream ss(res->body);
     ss >> sub.submission_id;
     if (sub.submission_id < 0) return false;
     int problem_type;
@@ -180,11 +203,20 @@ bool FetchOneSubmission() {
     sub.lang = GetCompiler(lang);
     sub.specjudge_lang = Compiler::GCC_CPP_17;
   }
-  // fetch limits & sj & interlib
-  // TODO
+  // fetch sj & interlib
+  TempDirectory tempdir;
+  if (tempdir.Path().empty()) return false;
+  const Params problem_params = AddKey({{"pid", std::to_string(sub.problem_id)}});
+  if (sub.specjudge_type != SpecjudgeType::NORMAL) {
+    res = DownloadFile<HTTPGet>(tempdir.SpecjudgePath(), cli, "/fetch/sjcode", problem_params, Headers());
+    if (!res) return false;
+  }
+  if (sub.interlib_type != InterlibType::NONE) {
+    res = DownloadFile<HTTPGet>(tempdir.InterlibPath(), cli, "/fetch/interlib", problem_params, Headers());
+    if (!res) return false;
+  }
   // fetch testdata metadata
-  res = RequestRetry<HTTPGet>(cli, "testdata_meta",
-      (httplib::Params){{"problem_id", std::to_string(sub.problem_id)}}, httplib::Headers());
+  res = RequestRetry<HTTPGet>(cli, "/fetch/testdata_meta", problem_params, Headers());
   if (!res) return false;
   int td_count = 0, orig_td_count = 0;
   std::vector<long> to_download, to_delete;
@@ -197,7 +229,7 @@ bool FetchOneSubmission() {
       orig_td[i.testdata_id] = i;
       if (i.order >= orig_td_count) orig_td_count = i.order + 1;
     }
-    std::stringstream ss(res.value()->body);
+    std::stringstream ss(res->body);
     ss >> td_count;
     for (int i = 0; i < td_count; i++) {
       Testdata td;
@@ -222,12 +254,12 @@ bool FetchOneSubmission() {
   for (long testdata_id : to_download) {
     if (!CreateDirs(TdPoolDir(testdata_id))) return false;
     // input
-    res = DownloadFile<HTTPGet>(TdPoolPath(testdata_id, true, true), cli, "testdata",
-        (httplib::Params){{"tid", std::to_string(testdata_id)}, {"input", ""}}, httplib::Headers());
+    res = DownloadFile<HTTPGet>(TdPoolPath(testdata_id, true, true), cli, "/fetch/testdata",
+        AddKey({{"tid", std::to_string(testdata_id)}, {"input", ""}}), Headers());
     if (!res) return false;
     // output
-    res = DownloadFile<HTTPGet>(TdPoolPath(testdata_id, false, true), cli, "testdata",
-        (httplib::Params){{"tid", std::to_string(testdata_id)}}, httplib::Headers());
+    res = DownloadFile<HTTPGet>(TdPoolPath(testdata_id, false, true), cli, "/fetch/testdata",
+        AddKey({{"tid", std::to_string(testdata_id)}}), Headers());
     if (!res) return false;
   }
   // update symlinks
@@ -260,10 +292,34 @@ bool FetchOneSubmission() {
   }
   // update database meta
   db->replace_range(new_meta.begin(), new_meta.end());
+  // fetch limits
+  res = RequestRetry<HTTPGet>(cli, "/fetch/testdata_limit", problem_params, Headers());
+  if (!res) return false;
+  {
+    std::stringstream ss(res->body);
+    sub.td_limits.resize(td_count, Submission::TestdataLimit{});
+    for (auto& lim : sub.td_limits) {
+      if (!(ss >> lim.time >> lim.vss >> lim.output)) return false;
+      lim.rss = 0;
+      lim.time *= 1000;
+    }
+  }
   // fetch submission
-  // TODO
+  res = DownloadFile<HTTPGet>(tempdir.UserCodePath(), cli, "/fetch/code",
+      AddKey({{"sid", std::to_string(sub.submission_id)}}), Headers());
+  if (!res) return false;
+  // finalize
   sub.submission_internal_id = GetUniqueSubmissionInternalId();
   sub.reporter = &server_reporter;
+  CreateDirs(SubmissionCodePath(sub.submission_internal_id));
+  Move(tempdir.UserCodePath(), SubmissionUserCode(sub.submission_internal_id));
+  if (sub.specjudge_type != SpecjudgeType::NORMAL) {
+    Move(tempdir.SpecjudgePath(), SubmissionJudgeCode(sub.submission_internal_id));
+  }
+  if (sub.interlib_type != InterlibType::NONE) {
+    Move(tempdir.InterlibPath(), SubmissionInterlibCode(sub.submission_internal_id));
+  }
+  PushSubmission(std::move(sub));
   return false;
 }
 
@@ -289,9 +345,9 @@ void SendResult(const Submission& sub, bool done) {
   }
   Request req{};
   req.is_post = false;
-  req.endpoint = "/write_result";
-  req.params = {{"sid", std::to_string(sub.submission_id)}, {"result", data},
-                {"status", done ? "OK" : "NO"}, {"key", kTIOJKey}};
+  req.endpoint = "/fetch/write_result";
+  req.params = AddKey({{"sid", std::to_string(sub.submission_id)}, {"result", data},
+                       {"status", done ? "OK" : "NO"}});
   PushRequest(std::move(req));
 }
 
@@ -299,8 +355,8 @@ void SendCEMessage(const Submission& sub) {
   Request req{};
   req.is_post = true;
   req.use_body = false;
-  req.endpoint = httplib::append_query_params("/write_message",
-      {{"sid", std::to_string(sub.submission_id)}, {"key", kTIOJKey}});
+  req.endpoint = httplib::append_query_params("/fetch/write_message",
+      AddKey({{"sid", std::to_string(sub.submission_id)}}));
   req.params = {{"message", sub.ce_message}};
   PushRequest(std::move(req));
 }
@@ -308,8 +364,8 @@ void SendCEMessage(const Submission& sub) {
 void SendValidating(int submission_id) {
   Request req{};
   req.is_post = false;
-  req.endpoint = "/validating";
-  req.params = {{"sid", std::to_string(submission_id)}, {"key", kTIOJKey}};
+  req.endpoint = "/fetch/validating";
+  req.params = AddKey({{"sid", std::to_string(submission_id)}});
   PushRequest(std::move(req));
 }
 

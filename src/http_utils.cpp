@@ -3,21 +3,25 @@
 
 namespace http_utils {
 
-std::string FormatParam(const char* str) {
+std::string FormatOneParam(const char* str) {
   return str;
 }
-std::string FormatParam(const std::string& str) {
+std::string FormatOneParam(const std::string& str) {
   return str;
 }
-std::string FormatParam(const httplib::Params& params) {
+std::string FormatOneParam(const httplib::Params& params) {
   return fmt::format("{}", params);
 }
-std::string FormatParam(const httplib::Headers& headers) {
+std::string FormatOneParam(const httplib::Headers& headers) {
   return "";
 }
+
 std::string FormatParam() {
   return "(none)";
 }
 
+bool IsSuccess(int code) {
+  return code >= 200 && code < 299;
+}
 
 } // namespace http_utils

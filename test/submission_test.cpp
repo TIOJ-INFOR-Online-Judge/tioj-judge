@@ -7,9 +7,8 @@
 #include <tioj/utils.h>
 
 long SetupSubmission(Submission& sub, int id, Compiler lang, long time, const std::string& code) {
-  static int sub_id = 0;
   sub.submission_id = id;
-  long iid = sub.submission_internal_id = sub_id++;
+  long iid = sub.submission_internal_id = GetUniqueSubmissionInternalId();
   sub.submitter_id = 10;
   sub.submission_time = time;
   sub.lang = lang;

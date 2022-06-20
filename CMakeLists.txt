@@ -3,10 +3,16 @@ cmake_minimum_required(VERSION 3.10)
 project(tioj_judge VERSION 0.1 LANGUAGES CXX)
 set(SOVERSION 0)
 
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
+set(CMAKE_CXX_FLAGS_DEBUG "-Og -g")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
 # options
 option(BUILD_SHARED_LIBS "Build using shared libraries" OFF)
@@ -25,12 +31,13 @@ set(HTTPLIB_REQUIRE_OPENSSL ON)
 set(HTTPLIB_REQUIRE_ZLIB ON)
 set(HTTPLIB_COMPILE ON)
 set(JSON_MultipleHeaders ON)
+set(BUILD_TESTING OFF) # for tortellini
 
 include(FetchContent)
 FetchContent_Declare(
   cjail
   GIT_REPOSITORY "https://github.com/adrien1018/cjail.git"
-  GIT_TAG "7cd2ae7e81fc5623b1bfdb7a882ac907337b2997"
+  GIT_TAG "648b7c6c5f83ba5f0ac81988419f60e388e04d01"
 )
 FetchContent_Declare(
   spdlog
@@ -57,7 +64,21 @@ FetchContent_Declare(
   sqlite_orm
   URL "https://github.com/fnc12/sqlite_orm/archive/refs/tags/v1.7.1.zip"
 )
-FetchContent_MakeAvailable(cjail spdlog fmt json ini httplib sqlite_orm)
+FetchContent_Declare(
+  argparse
+  URL "https://github.com/p-ranav/argparse/archive/refs/tags/v2.5.zip"
+)
+
+function (FetchContent_MakeAvailable_Exclude)
+  foreach(dep IN LISTS ARGV)
+    FetchContent_GetProperties(${dep})
+    if(NOT ${dep}_POPULATED)
+      FetchContent_Populate(${dep})
+      add_subdirectory(${${dep}_SOURCE_DIR} ${${dep}_BINARY_DIR} EXCLUDE_FROM_ALL)
+    endif()
+  endforeach()
+endfunction()
+FetchContent_MakeAvailable_Exclude(cjail spdlog fmt json ini httplib sqlite_orm argparse)
 
 # default scoring
 add_executable(default-scoring "tools/default-scoring.cpp")
@@ -71,9 +92,9 @@ add_subdirectory(src)
 
 # judge
 file(GLOB JUDGE_SRC "src/*.cpp" "src/*.h")
-add_executable(judge ${JUDGE_SRC})
-target_link_libraries(judge libtioj ${TIOJ_DEPS} spdlog::spdlog fmt::fmt tortellini httplib::httplib sqlite_orm::sqlite_orm)
-install(TARGETS judge DESTINATION bin)
+add_executable(tioj-judge ${JUDGE_SRC})
+target_link_libraries(tioj-judge libtioj ${TIOJ_DEPS} spdlog::spdlog fmt::fmt tortellini httplib::httplib sqlite_orm::sqlite_orm argparse::argparse)
+install(TARGETS tioj-judge DESTINATION bin)
 
 # testing
 if(TIOJ_BUILD_TESTS)
@@ -83,7 +104,7 @@ if(TIOJ_BUILD_TESTS)
     URL "https://github.com/google/googletest/archive/refs/tags/release-1.11.0.zip"
   )
   set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
-  FetchContent_MakeAvailable(googletest)
+  FetchContent_MakeAvailable_Exclude(googletest)
 
   file(GLOB TEST_SRC "test/*.cpp" "test/*.h")
   add_executable(judge-test ${TEST_SRC})

@@ -7,6 +7,8 @@
 #include <spdlog/spdlog.h>
 #include "utils.h"
 
+// TODO: add serialization & standalone executable to avoid overcount RSS for small-usage programs
+
 CJailCtxClass SandboxOptions::ToCJailCtx() const {
   CJailCtxClass ret;
   struct cjail_ctx& ctx = ret.ctx_;
