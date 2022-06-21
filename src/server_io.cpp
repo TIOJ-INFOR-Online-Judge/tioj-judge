@@ -1,7 +1,7 @@
 #include "server_io.h"
 
+#include <list>
 #include <mutex>
-#include <queue>
 #include <chrono>
 #include <memory>
 #include <unordered_set>
@@ -66,6 +66,8 @@ std::unique_ptr<Storage> db;
 
 // web client
 struct Request {
+  bool is_unique;
+  long key;
   bool is_post;
   bool use_body;
   std::string endpoint; // use append_query_params if necessary
@@ -89,7 +91,8 @@ void DoRequest(const Request& req) {
   }
 }
 
-std::queue<Request> request_queue;
+std::list<Request> request_queue;
+std::unordered_map<long, std::list<Request>::iterator> request_map;
 std::mutex request_queue_mtx;
 std::condition_variable request_queue_cv;
 void RequestLoop() {
@@ -97,7 +100,8 @@ void RequestLoop() {
   while (true) {
     request_queue_cv.wait(lck, [](){ return request_queue.size(); });
     Request req = std::move(request_queue.front());
-    request_queue.pop();
+    if (req.is_unique) request_map.erase(req.key);
+    request_queue.pop_front();
     lck.unlock();
     DoRequest(req);
     lck.lock();
@@ -107,7 +111,15 @@ void RequestLoop() {
 void PushRequest(Request&& req) {
   {
     std::lock_guard lck(request_queue_mtx);
-    request_queue.push(std::move(req));
+    if (req.is_unique) {
+      if (auto it = request_map.find(req.key); it != request_map.end()) {
+        *(it->second) = std::move(req);
+      } else {
+        request_map[req.key] = request_queue.insert(request_queue.end(), std::move(req));
+      }
+    } else {
+      request_queue.push_back(std::move(req));
+    }
   }
   request_queue_cv.notify_one();
 }
@@ -344,6 +356,10 @@ void SendResult(const Submission& sub, bool done) {
     }
   }
   Request req{};
+  if (!done) {
+    req.is_unique = true;
+    req.key = sub.submission_id;
+  }
   req.is_post = false;
   req.endpoint = "/fetch/write_result";
   req.params = AddKey({{"sid", std::to_string(sub.submission_id)}, {"result", data},
