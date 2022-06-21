@@ -6,6 +6,7 @@
 #include <tortellini.hh>
 #include <spdlog/spdlog.h>
 #include <argparse/argparse.hpp>
+#include <tioj/logger.h>
 #include "tioj/paths.h"
 #include "tioj/submission.h"
 #include "server_io.h"
@@ -77,6 +78,7 @@ void ParseArgs(int argc, char** argv) {
 
 int main(int argc, char** argv) {
   spdlog::set_pattern("[%t] %+");
+  InitLogger();
   if (geteuid() != 0) {
     spdlog::error("Must be run as root.");
     return 0;

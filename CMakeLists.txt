@@ -37,7 +37,7 @@ include(FetchContent)
 FetchContent_Declare(
   cjail
   GIT_REPOSITORY "https://github.com/adrien1018/cjail.git"
-  GIT_TAG "648b7c6c5f83ba5f0ac81988419f60e388e04d01"
+  GIT_TAG "2e4f9cddb052bfe7e0266c03b1277e00789c684b"
 )
 FetchContent_Declare(
   spdlog
@@ -74,6 +74,11 @@ function (FetchContent_MakeAvailable_Exclude)
     FetchContent_GetProperties(${dep})
     if(NOT ${dep}_POPULATED)
       FetchContent_Populate(${dep})
+      if(${dep} STREQUAL "spdlog")
+        # hack spdlog
+        execute_process(COMMAND sed -i "s/^\\([^p].*mutex_;.*\\)$/public:\\1 private:/" ${${dep}_SOURCE_DIR}/include/spdlog/sinks/ansicolor_sink.h)
+        message("Patched spdlog")
+      endif()
       add_subdirectory(${${dep}_SOURCE_DIR} ${${dep}_BINARY_DIR} EXCLUDE_FROM_ALL)
     endif()
   endforeach()
