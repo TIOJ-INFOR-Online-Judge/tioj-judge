@@ -236,28 +236,33 @@ void FinalizeExecute(Submission& sub, const TaskEntry& task, const struct cjail_
   td_result.time = ToUs(res.rus.ru_utime) + ToUs(res.rus.ru_stime);
   td_result.score = 0;
   if (res.timekill == -1) {
+    // timekill = -1 means SandboxExec error (see sandbox_exec.cpp, sandbox_main.cpp)
     td_result.verdict = Verdict::EE;
   } else if (res.oomkill > 0) {
+    // oomkill = -1 means failed to read oom (see cjail/cjail.h)
     td_result.verdict = Verdict::MLE;
   } else if (res.timekill) {
     td_result.verdict = Verdict::TLE;
-  } else if (WIFSIGNALED(res.info.si_status)) {
-    if (WTERMSIG(res.info.si_status) == SIGXFSZ) {
+  } else if (res.info.si_code == CLD_KILLED || res.info.si_code == CLD_DUMPED) {
+    if (res.info.si_status == SIGXFSZ) {
       td_result.verdict = Verdict::OLE;
+    } else if ((lim.vss && td_result.vss > lim.vss) || (lim.rss && td_result.rss > lim.rss)) {
+      // MLE will likely cause SIGSEGV or std::bad_alloc (SIGABRT), so we check it here
+      td_result.verdict = Verdict::MLE;
     } else {
       td_result.verdict = Verdict::SIG;
     }
-  } else if (res.info.si_status != 0) {
-    td_result.verdict = Verdict::RE;
   } else if ((lim.vss && td_result.vss > lim.vss) || (lim.rss && td_result.rss > lim.rss)) {
     td_result.verdict = Verdict::MLE;
+  } else if (res.info.si_status != 0) {
+    td_result.verdict = Verdict::RE;
   } else if (td_result.time > lim.time) {
     td_result.verdict = Verdict::TLE;
   } else {
     td_result.verdict = Verdict::NUL;
   }
-  spdlog::info("Execute finished: id={} subtask={} verdict={} time={} vss={} rss={}",
-               id, subtask, VerdictToAbr(td_result.verdict),
+  spdlog::info("Execute finished: id={} subtask={} code={} status={} verdict={} time={} vss={} rss={}",
+               id, subtask, res.info.si_code, res.info.si_status, VerdictToAbr(td_result.verdict),
                td_result.time, td_result.vss, td_result.rss);
 }
 

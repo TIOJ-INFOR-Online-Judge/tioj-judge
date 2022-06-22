@@ -10,7 +10,7 @@
 #include <spdlog/spdlog.h>
 #include "paths.h"
 #include "utils.h"
-#include "sandbox.h"
+#include "sandbox_exec.h"
 
 namespace {
 
@@ -125,9 +125,10 @@ struct cjail_result RunExecute(const Submission& sub, const Task& task, int uid)
   opt.command = ExecuteCommand(sub.lang, program);
   opt.workdir = Workdir("/");
   opt.uid = opt.gid = uid;
+  // TODO: modify cjail so that it can also check for cpu time
   opt.wall_time = std::max(long(lim.time * 1.2), lim.time + 1'000'000);
   opt.rss = lim.rss;
-  opt.vss = lim.vss;
+  opt.vss = lim.vss + 2048; // add some margin so we can determine whether it is MLE
   opt.proc_num = 1;
   // file limit is not needed since we have already limit the total size by mounting tmpfs
   opt.fsize = lim.output;

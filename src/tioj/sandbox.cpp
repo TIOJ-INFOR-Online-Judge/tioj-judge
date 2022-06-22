@@ -1,13 +1,89 @@
 #include "sandbox.h"
 
 #include <unistd.h>
-#include <string>
+#include <cstring>
 
-#include <fmt/ranges.h>
-#include <spdlog/spdlog.h>
-#include "utils.h"
+SandboxOptions::SandboxOptions(const std::vector<uint8_t>& vec) {
+  size_t cur = 0;
+  auto ReadInt = [&]() {
+    Int r = *(Int*)(vec.data() + cur);
+    cur += sizeof(Int);
+    return r;
+  };
+  auto ReadString = [&]() {
+    Int size = ReadInt();
+    std::string str(size, '\0');
+    memcpy(str.data(), vec.data() + cur, size);
+    cur += size;
+    return str;
+  };
+  boxdir = ReadString();
+  command.resize(ReadInt());
+  for (auto& i : command) i = ReadString();
+  preserve_env = ReadInt();
+  envs.resize(ReadInt());
+  for (auto& i : envs) i = ReadString();
+  workdir = ReadString();
+  input = ReadString();
+  output = ReadString();
+  error = ReadString();
+  fd_input = ReadInt();
+  fd_output = ReadInt();
+  fd_error = ReadInt();
+  cpu_set.resize(ReadInt());
+  for (auto& i : cpu_set) i = ReadInt();
+  uid = ReadInt();
+  gid = ReadInt();
+  wall_time = ReadInt();
+  rss = ReadInt();
+  vss = ReadInt();
+  proc_num = ReadInt();
+  file_num = ReadInt();
+  fsize = ReadInt();
+  dirs.resize(ReadInt());
+  for (auto& i : dirs) i = ReadString();
+}
 
-// TODO: add serialization & standalone executable to avoid overcount RSS for small-usage programs
+std::vector<uint8_t> SandboxOptions::Serialize() const {
+  std::vector<uint8_t> ret;
+  auto AddLenWrite = [&](size_t len, Int r){
+    Int cur = ret.size();
+    ret.resize(cur + len);
+    *(Int*)(ret.data() + cur) = r;
+  };
+  auto PushInt = [&](Int r) { AddLenWrite(sizeof(Int), r); };
+  auto PushString = [&](const std::string& str){
+    Int cur = ret.size();
+    AddLenWrite(str.size() + sizeof(Int), str.size());
+    memcpy(ret.data() + (cur + sizeof(Int)), str.c_str(), str.size());
+  };
+  PushString(boxdir);
+  PushInt(command.size());
+  for (auto& i : command) PushString(i);
+  PushInt(preserve_env);
+  PushInt(envs.size());
+  for (auto& i : envs) PushString(i);
+  PushString(workdir);
+  PushString(input);
+  PushString(output);
+  PushString(error);
+  PushInt(fd_input);
+  PushInt(fd_output);
+  PushInt(fd_error);
+  PushInt(cpu_set.size());
+  for (auto& i : cpu_set) PushInt(i);
+  PushInt(uid);
+  PushInt(gid);
+  PushInt(wall_time);
+  PushInt(rss);
+  PushInt(vss);
+  PushInt(proc_num);
+  PushInt(file_num);
+  PushInt(fsize);
+  PushInt(dirs.size());
+  for (auto& i : dirs) PushString(i);
+  return ret;
+}
 
 CJailCtxClass SandboxOptions::ToCJailCtx() const {
   CJailCtxClass ret;
@@ -65,16 +141,5 @@ CJailCtxClass SandboxOptions::ToCJailCtx() const {
     mnt_list_add(ret.mnt_list_, &mnt_ctx);
   }
   ctx.mount_cfg = ret.mnt_list_;
-  return ret;
-}
-
-struct cjail_result SandboxExec(const SandboxOptions& opt) {
-  CJailCtxClass ctx = opt.ToCJailCtx();
-  struct cjail_result ret = {};
-  spdlog::debug("cjail_exec boxdir={} command={}", opt.boxdir, fmt::format("{}", opt.command));
-  if (cjail_exec(&ctx.GetCtx(), &ret) < 0) {
-    spdlog::warn("cjail_exec error: errno={} {}", errno, strerror(errno));
-    ret.timekill = -1;
-  }
   return ret;
 }

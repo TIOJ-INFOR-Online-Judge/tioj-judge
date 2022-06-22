@@ -18,6 +18,10 @@ set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 option(BUILD_SHARED_LIBS "Build using shared libraries" OFF)
 option(TIOJ_BUILD_TESTS "Build test programs" ON)
 
+if(NOT ${BUILD_SHARED_LIBS})
+  set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
+endif()
+
 # configs
 set(TIOJ_DATA_DIR "/var/lib/tioj-judge/" CACHE PATH "Path of default testdata & scoring program location")
 
@@ -71,13 +75,15 @@ FetchContent_Declare(
 
 function (FetchContent_MakeAvailable_Exclude)
   foreach(dep IN LISTS ARGV)
+    message(STATUS "Fetching ${dep}")
     FetchContent_GetProperties(${dep})
     if(NOT ${dep}_POPULATED)
       FetchContent_Populate(${dep})
-      if(${dep} STREQUAL "spdlog")
+      if(${dep} STREQUAL "spdlog" AND NOT DEFINED SPDLOG_PATCHED)
         # hack spdlog
         execute_process(COMMAND sed -i "s/^\\([^p].*mutex_;.*\\)$/public:\\1 private:/" ${${dep}_SOURCE_DIR}/include/spdlog/sinks/ansicolor_sink.h)
-        message("Patched spdlog")
+        message(STATUS "Patched spdlog")
+        set(SPDLOG_PATCHED ON CACHE INTERNAL "")
       endif()
       add_subdirectory(${${dep}_SOURCE_DIR} ${${dep}_BINARY_DIR} EXCLUDE_FROM_ALL)
     endif()
@@ -89,6 +95,13 @@ FetchContent_MakeAvailable_Exclude(cjail spdlog fmt json ini httplib sqlite_orm 
 add_executable(default-scoring "tools/default-scoring.cpp")
 target_link_libraries(default-scoring nlohmann_json::nlohmann_json)
 install(TARGETS default-scoring DESTINATION "${TIOJ_DATA_DIR}/")
+# sandbox exec
+# static link it to minimize memory usage; this will lead to some warnings about libc, but it is okay
+add_executable(sandbox-exec "src/tioj/sandbox_main.cpp" "src/tioj/sandbox.cpp" "src/tioj/sandbox.h")
+target_link_libraries(sandbox-exec CJail::libcjail)
+target_compile_options(sandbox-exec PUBLIC -Os -static) # note that later flags will override previous ones
+target_link_options(sandbox-exec PUBLIC -static -pthread)
+install(TARGETS sandbox-exec DESTINATION "${TIOJ_DATA_DIR}/")
 
 # library
 # required for any program that uses libtioj
