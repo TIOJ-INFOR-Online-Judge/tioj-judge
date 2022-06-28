@@ -340,15 +340,10 @@ void SendResult(const Submission& sub, bool done) {
   Verdict ver = sub.verdict;
   if (ver == Verdict::CE || ver == Verdict::CLE || ver == Verdict::ER) {
     data = VerdictToAbr(ver);
-    // TODO FEATURE(web-update-1): support more verdicts & set score
-    if (data == "CLE") data = "CE";
   } else {
     for (size_t i = 0; i < sub.td_limits.size(); i++) {
       if (i < sub.td_results.size()) {
         auto& nowtd = sub.td_results[i];
-        std::string ver_str = VerdictToAbr(nowtd.verdict);
-        // TODO FEATURE(web-update-1)
-        if (ver_str == "EE" || ver_str == "OLE" || ver_str == "SIG") ver_str = "RE";
         data += fmt::format("{}/{}/{}/", VerdictToAbr(nowtd.verdict), nowtd.time / 1000, nowtd.rss);
       } else {
         data += "/0/0/";

@@ -35,6 +35,7 @@ SandboxOptions::SandboxOptions(const std::vector<uint8_t>& vec) {
   uid = ReadInt();
   gid = ReadInt();
   wall_time = ReadInt();
+  cpu_time = ReadInt();
   rss = ReadInt();
   vss = ReadInt();
   proc_num = ReadInt();
@@ -75,6 +76,7 @@ std::vector<uint8_t> SandboxOptions::Serialize() const {
   PushInt(uid);
   PushInt(gid);
   PushInt(wall_time);
+  PushInt(cpu_time);
   PushInt(rss);
   PushInt(vss);
   PushInt(proc_num);
@@ -126,6 +128,9 @@ CJailCtxClass SandboxOptions::ToCJailCtx() const {
   ctx.cg_rss = rss;
   ctx.lim_time.tv_sec = wall_time / 1'000'000;
   ctx.lim_time.tv_usec = wall_time % 1'000'000;
+  ctx.lim_cputime.tv_sec = cpu_time / 1'000'000;
+  ctx.lim_cputime.tv_usec = cpu_time % 1'000'000;
+  // default: cputime_poll_interval
   // default: seccomp_cfg
   // bind mounts
   // reallocation of str_buf_ invalidate str.data(), thus we need to reserve it first

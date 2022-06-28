@@ -39,7 +39,7 @@ class SandboxOptions {
   int fd_input, fd_output, fd_error; // -1 for not dup; overrides input/output
   std::vector<int> cpu_set;
   int uid, gid;
-  long wall_time; // us
+  long wall_time, cpu_time; // us
   long rss, vss; // KiB
   int proc_num;
   int file_num;
@@ -50,7 +50,7 @@ class SandboxOptions {
       preserve_env(false),
       fd_input(-1), fd_output(-1), fd_error(-1),
       uid(65534), gid(65534),
-      wall_time(0),
+      wall_time(0), cpu_time(0),
       rss(0), vss(0),
       proc_num(0),
       file_num(0),
