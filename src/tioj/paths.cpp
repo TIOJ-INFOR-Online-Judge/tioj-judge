@@ -210,6 +210,9 @@ fs::path TdOutput(int prob, int td) {
 fs::path DefaultScoringPath() {
   return kDataDir / "default-scoring";
 }
+fs::path SpecjudgeHeadersPath() {
+  return kDataDir / "judge-headers";
+}
 
 fs::path SubmissionCodePath(int id) {
   return kSubmissionRoot / PadInt(id, 6);

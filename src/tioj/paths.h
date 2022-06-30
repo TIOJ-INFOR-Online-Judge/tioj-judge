@@ -38,4 +38,7 @@ fs::path ScoringBoxTdOutput(long id, int td, bool inside_box = false);
 fs::path ScoringBoxMetaFile(long id, int td, bool inside_box = false);
 fs::path ScoringBoxOutput(long id, int td, bool inside_box = false);
 
+fs::path DefaultScoringPath();
+fs::path SpecjudgeHeadersPath();
+
 #endif  // PATHS_H_

@@ -25,7 +25,6 @@ fs::path TdRoot();
 fs::path TdPath(int prob);
 fs::path TdInput(int prob, int td);
 fs::path TdOutput(int prob, int td);
-fs::path DefaultScoringPath();
 
 // for submission fetch
 // TODO FEATURE(web-refactor): Specjudge & interlib code is bound with submission currently.

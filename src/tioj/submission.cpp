@@ -39,6 +39,7 @@ nlohmann::json Submission::TestdataMeta(int subtask) const {
     {"submitter_name", submitter},
     {"submission_time", submission_time},
     {"compiler", CompilerName(lang)},
+    {"testdata_index", subtask},
     {"limits", {
       {"time_us", lim.time},
       {"vss_kb", lim.vss},
@@ -46,6 +47,7 @@ nlohmann::json Submission::TestdataMeta(int subtask) const {
       {"output_kb", lim.output},
     }},
     {"stats", {
+      {"original_verdict", VerdictToAbr(td_results[subtask].verdict)},
       {"exit_code", res.info.si_status},
       {"real_us", ToUs(res.time)},
       {"user_us", ToUs(res.rus.ru_utime)},
@@ -131,20 +133,26 @@ bool SetupCompile(const Submission& sub, const TaskEntry& task) {
   CreateDirs(Workdir(CompileBoxPath(id, subtask)), fs::perms::all);
   switch (subtask) {
     case CompileSubtask::USERPROG: {
-      Copy(SubmissionUserCode(id), CompileBoxInput(id, subtask, sub.lang),
-          fs::perms::all);
+      Copy(SubmissionUserCode(id), CompileBoxInput(id, subtask, sub.lang), kPerm666);
       switch (sub.interlib_type) {
         case InterlibType::NONE: break;
         case InterlibType::INCLUDE: {
-          Copy(SubmissionInterlibCode(id), CompileBoxInterlib(id, sub.problem_id),
-              fs::perms::all);
+          Copy(SubmissionInterlibCode(id), CompileBoxInterlib(id, sub.problem_id), kPerm666);
         }
       }
       break;
     }
     case CompileSubtask::SPECJUDGE: {
-      Copy(SubmissionJudgeCode(id), CompileBoxInput(id, subtask, sub.specjudge_lang),
-          fs::perms::all);
+      Copy(SubmissionJudgeCode(id), CompileBoxInput(id, subtask, sub.specjudge_lang), kPerm666);
+      fs::path src = SpecjudgeHeadersPath();
+      fs::path box = CompileBoxPath(id, subtask);
+      for (auto& dir_entry : fs::recursive_directory_iterator(src)) {
+        if (dir_entry.is_directory()) continue;
+        fs::path p = dir_entry.path();
+        const auto parent_dirs = box / fs::relative(p, src).parent_path();
+        CreateDirs(parent_dirs, fs::perms::all);
+        Copy(p, parent_dirs / p.filename(), kPerm666);
+      }
       break;
     }
   }
@@ -174,6 +182,15 @@ void FinalizeCompile(Submission& sub, const TaskEntry& task, const struct cjail_
         // TODO: filter compile error message
       }
       if (sub.reporter) sub.reporter->ReportCEMessage(sub);
+    } else if (spdlog::get_level() == spdlog::level::debug) {
+      fs::path path = CompileBoxMessage(id, subtask);
+      if (fs::is_regular_file(path)) {
+        char buf[4096];
+        std::ifstream fin(path);
+        fin.read(buf, sizeof(buf));
+        std::string str(buf, fin.gcount());
+        spdlog::debug("Message: {}", str);
+      }
     }
   } else {
     // success
