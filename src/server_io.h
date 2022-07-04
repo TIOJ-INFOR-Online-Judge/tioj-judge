@@ -21,8 +21,8 @@ extern double kFetchInterval;
 bool FetchOneSubmission();
 
 // These functions will push the request into queue and return immediately
-void SendResult(const Submission&, bool done);
-void SendCEMessage(const Submission&);
+void SendResult(const Submission&);
+void SendFinalResult(const Submission&);
 void SendValidating(int submission_id); // unused until TODO(web-update-2) is finished
 
 // This function will call FetchOneSubmission() periodically, and also deal with

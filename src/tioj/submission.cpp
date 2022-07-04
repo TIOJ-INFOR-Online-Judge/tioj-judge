@@ -4,6 +4,7 @@
 #include <sys/stat.h>
 #include <mutex>
 #include <queue>
+#include <regex>
 #include <fstream>
 #include <unordered_set>
 #include <unordered_map>
@@ -36,7 +37,8 @@ nlohmann::json Submission::TestdataMeta(int subtask) const {
     {"problem_id", problem_id},
     {"submission_id", submission_id},
     {"submitter_id", submitter_id},
-    {"submitter_name", submitter},
+    {"submitter_name", submitter_name},
+    {"submitter_nickname", submitter_nickname},
     {"submission_time", submission_time},
     {"compiler", CompilerName(lang)},
     {"testdata_index", subtask},
@@ -79,10 +81,10 @@ struct TaskEntry {
       submission_internal_id(sub_id),
       task(task), priority(priority),
       indeg(0) {}
-  bool operator>(const TaskEntry& x) const {
+  bool operator<(const TaskEntry& x) const {
     // TODO FEATURE(group): order by group_offset first
-    return std::make_tuple(priority, submission_internal_id, task.subtask) >
-           std::make_tuple(x.priority, x.submission_internal_id, x.task.subtask);
+    return std::make_tuple(priority, -submission_internal_id, -task.subtask) <
+           std::make_tuple(x.priority, -x.submission_internal_id, -x.task.subtask);
   }
 };
 long TaskEntry::task_count = 0;
@@ -93,7 +95,7 @@ std::unordered_map<long, TaskEntry> task_list;
 
 struct PriorityCompare {
   bool operator()(long a, long b) {
-    return task_list[a] > task_list[b];
+    return task_list[a] < task_list[b];
   }
 };
 
@@ -145,7 +147,7 @@ bool SetupCompile(const Submission& sub, const TaskEntry& task) {
     case CompileSubtask::SPECJUDGE: {
       Copy(SubmissionJudgeCode(id), CompileBoxInput(id, subtask, sub.specjudge_lang), kPerm666);
       fs::path src = SpecjudgeHeadersPath();
-      fs::path box = CompileBoxPath(id, subtask);
+      fs::path box = Workdir(CompileBoxPath(id, subtask));
       for (auto& dir_entry : fs::recursive_directory_iterator(src)) {
         if (dir_entry.is_directory()) continue;
         fs::path p = dir_entry.path();
@@ -160,6 +162,11 @@ bool SetupCompile(const Submission& sub, const TaskEntry& task) {
 }
 
 void FinalizeCompile(Submission& sub, const TaskEntry& task, const struct cjail_result& res) {
+  constexpr size_t kMaxMsgLen = 4000;
+  static const std::regex kFilterRegex(
+      "(^|\\n)In file included from[\\S\\s]*?(\\n/workdir/prog|$)");
+  static const std::string kFilterReplace = "$1[Error messages from headers removed]$2";
+
   long id = sub.submission_internal_id;
   CompileSubtask subtask = (CompileSubtask)task.task.subtask;
   if (res.timekill || res.oomkill > 0 || res.info.si_status != 0 ||
@@ -174,12 +181,20 @@ void FinalizeCompile(Submission& sub, const TaskEntry& task, const struct cjail_
     if (subtask == CompileSubtask::USERPROG) {
       fs::path path = CompileBoxMessage(id, subtask);
       if (fs::is_regular_file(path)) {
-        char buf[4096];
+        char buf[kMaxMsgLen + 1];
         std::ifstream fin(path);
         fin.read(buf, sizeof(buf));
         sub.ce_message.assign(buf, fin.gcount());
         spdlog::debug("Message: {}", sub.ce_message);
-        // TODO: filter compile error message
+        bool truncated = sub.ce_message.size() > kMaxMsgLen;
+        if (truncated) {
+          sub.ce_message.resize(kMaxMsgLen);
+        }
+        sub.ce_message = std::regex_replace(sub.ce_message, kFilterRegex, kFilterReplace);
+        if (truncated) {
+          sub.ce_message += "\n[Error message truncated after " +
+              std::to_string(kMaxMsgLen) + " bytes]";
+        }
       }
       if (sub.reporter) sub.reporter->ReportCEMessage(sub);
     } else if (spdlog::get_level() == spdlog::level::debug) {
@@ -290,7 +305,10 @@ bool SetupScoring(const Submission& sub, const TaskEntry& task) {
   if (cancelled_list.count(id)) return false; // cancellation check
   // if already TLE/MLE/etc, do not invoke old-style special judge
   if (sub.td_results[subtask].verdict != Verdict::NUL &&
-      sub.specjudge_type != SpecjudgeType::SPECJUDGE_NEW) return false;
+      sub.specjudge_type != SpecjudgeType::SPECJUDGE_NEW) {
+    if (sub.reporter) sub.reporter->ReportScoringResult(sub, subtask);
+    return false;
+  }
   CreateDirs(Workdir(ScoringBoxPath(id, subtask)), fs::perms::all);
   Move(ExecuteBoxFinalOutput(id, subtask),
        ScoringBoxUserOutput(id, subtask), kPerm666);
@@ -371,7 +389,7 @@ void FinalizeScoring(Submission& sub, const TaskEntry& task, const struct cjail_
           if (it->is_number()) td_result.rss = it->get<long>();
         } catch (...) {}
       }
-    } catch (nlohmann::detail::parse_error&) {
+    } catch (nlohmann::json::exception&) {
       // WA
     }
   }
@@ -490,9 +508,7 @@ void PushSubmission(Submission&& sub) {
   //            +-> execute_n -+-> scoring ---+
   //
   int id = sub.submission_internal_id;
-  // We use submissions time as priority; this can be adjusted if needed
-  //   (e.g. put contest submissions before normal submissions
-  long priority = -sub.submission_time;
+  long priority = sub.priority;
   std::vector<TaskEntry> executes, scorings;
   TaskEntry finalize(id, {TaskType::FINALIZE, 0}, priority);
   for (int i = 0; i < (int)sub.td_limits.size(); i++) {

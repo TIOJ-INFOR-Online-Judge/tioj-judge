@@ -10,6 +10,7 @@
 #include <httplib.h>
 #include <fmt/core.h>
 #include <fmt/ranges.h>
+#include <nlohmann/json.hpp>
 #include <sqlite_orm/sqlite_orm.h>
 
 #include "http_utils.h"
@@ -66,14 +67,13 @@ std::unique_ptr<Storage> db;
 
 // web client
 struct Request {
-  bool is_unique;
-  long key;
+  bool is_unique; //
+  long key;       // for redundant elimination
   bool is_post;
   bool use_body;
-  std::string endpoint; // use append_query_params if necessary
-  httplib::Params params;
-  std::string body;   //
-  std::string format; // only if use_body
+  std::string endpoint;
+  httplib::Params params; // only if not is_post
+  nlohmann::json body; // only if is_post; key will be added automatically
 };
 
 using ParItem = httplib::Params::value_type;
@@ -81,11 +81,7 @@ using ParItem = httplib::Params::value_type;
 void DoRequest(const Request& req) {
   httplib::Client cli(kTIOJUrl);
   if (req.is_post) {
-    if (req.use_body) {
-      RequestRetry<HTTPPost>(cli, req.endpoint, req.body.c_str(), req.format.c_str());
-    } else {
-      RequestRetry<HTTPPost>(cli, req.endpoint, req.params);
-    }
+    RequestRetry<HTTPPost>(cli, req.endpoint, req.body.dump(), "application/json");
   } else {
     RequestRetry<HTTPGet>(cli, req.endpoint, req.params, httplib::Headers());
   }
@@ -109,6 +105,7 @@ void RequestLoop() {
 }
 
 void PushRequest(Request&& req) {
+  if (req.is_post) req.body["key"] = kTIOJKey;
   {
     std::lock_guard lck(request_queue_mtx);
     if (req.is_unique) {
@@ -132,13 +129,13 @@ class ServerReporter : public Reporter {
     SendValidating(sub.submission_id);
   }
   void ReportOverallResult(const Submission& sub) override {
-    SendResult(sub, true);
+    SendFinalResult(sub);
   }
   void ReportScoringResult(const Submission& sub, int subtask) override {
-    SendResult(sub, false);
+    SendResult(sub);
   }
   void ReportCEMessage(const Submission& sub) override {
-    SendCEMessage(sub);
+    // do nothing; since ReportOverallResult will send the message anyways
   }
 } server_reporter;
 
@@ -186,81 +183,96 @@ class TempDirectory { // RAII tempdir
 bool FetchOneSubmission() {
   using namespace httplib;
   using namespace sqlite_orm;
+  using nlohmann::json;
 
   if (!db) db = std::make_unique<Storage>(InitDatabase());
   Client cli(kTIOJUrl);
   // fetch submission
-  auto res = RequestRetry<HTTPGet>(cli, "/fetch/submission", AddKey({}), Headers());
+  auto res = RequestRetry<HTTPGet>(cli, "/fetch/submission_new", AddKey({}), Headers());
   if (!res) return false;
+
   Submission sub;
-  {
-    std::stringstream ss(res->body);
-    ss >> sub.submission_id;
-    if (sub.submission_id < 0) return false;
-    int problem_type;
-    std::string lang;
-    ss >> sub.problem_id >> problem_type >> sub.submitter_id >> lang;
-    static constexpr SpecjudgeType kSpecjudgeTypeMap[] = {
-      SpecjudgeType::NORMAL,
-      SpecjudgeType::SPECJUDGE_OLD,
-      SpecjudgeType::NORMAL,
-    };
-    static constexpr InterlibType kInterlibTypeMap[] = {
-      InterlibType::NONE,
-      InterlibType::NONE,
-      InterlibType::INCLUDE,
-    };
-    sub.specjudge_type = kSpecjudgeTypeMap[problem_type];
-    sub.interlib_type = kInterlibTypeMap[problem_type];
-    sub.lang = GetCompiler(lang);
-    sub.specjudge_lang = Compiler::GCC_CPP_17;
-  }
-  // fetch sj & interlib
   TempDirectory tempdir;
   if (tempdir.Path().empty()) return false;
-  const Params problem_params = AddKey({{"pid", std::to_string(sub.problem_id)}});
-  if (sub.specjudge_type != SpecjudgeType::NORMAL) {
-    res = DownloadFile<HTTPGet>(tempdir.SpecjudgePath(), cli, "/fetch/sjcode", problem_params, Headers());
-    if (!res) return false;
-  }
-  if (sub.interlib_type != InterlibType::NONE) {
-    res = DownloadFile<HTTPGet>(tempdir.InterlibPath(), cli, "/fetch/interlib", problem_params, Headers());
-    if (!res) return false;
-  }
-  // fetch testdata metadata
-  res = RequestRetry<HTTPGet>(cli, "/fetch/testdata_meta", problem_params, Headers());
-  if (!res) return false;
+
   int td_count = 0, orig_td_count = 0;
   std::vector<long> to_download, to_delete;
   std::vector<std::pair<int, long>> to_update_position;
   std::vector<Testdata> new_meta;
-  {
-    std::unordered_map<long, Testdata> orig_td;
-    std::unordered_set<long> new_td;
-    for (auto& i : db->iterate<Testdata>(where(c(&Testdata::problem_id) == sub.problem_id))) {
-      orig_td[i.testdata_id] = i;
-      if (i.order >= orig_td_count) orig_td_count = i.order + 1;
+  try {
+    json data = json::parse(res->body);
+    if (data.empty()) return false;
+    sub.submission_id = data["submission_id"].get<int>();
+    sub.priority = data["priority"].get<long>();
+    sub.lang = GetCompiler(data["compiler"].get<std::string>());
+    sub.submission_time = data["time"].get<int64_t>();
+    std::ofstream(tempdir.UserCodePath()) << data["code"].get<std::string>();
+
+    // user information
+    auto& user = data["user"];
+    sub.submitter_id = user["id"].get<int>();
+    sub.submitter_name = user["name"].get<std::string>();
+    sub.submitter_nickname = user["nickname"].get<std::string>();
+
+    // problem information
+    auto& problem = data["problem"];
+    sub.problem_id = problem["id"].get<int>();
+    sub.specjudge_type = (SpecjudgeType)problem["specjudge_type"].get<int>();
+    if (sub.specjudge_type != SpecjudgeType::NORMAL) {
+      sub.specjudge_lang = GetCompiler(problem["specjudge_compiler"].get<std::string>());
     }
-    std::stringstream ss(res->body);
-    ss >> td_count;
-    for (int i = 0; i < td_count; i++) {
-      Testdata td;
-      ss >> td.testdata_id >> td.timestamp;
-      td.order = i;
-      td.problem_id = sub.problem_id;
-      auto it = orig_td.find(td.testdata_id);
-      if (it == orig_td.end() || it->second.timestamp != td.timestamp) {
-        to_download.push_back(td.testdata_id);
+    sub.interlib_type = (InterlibType)problem["interlib_type"].get<int>();
+    if (sub.specjudge_type != SpecjudgeType::NORMAL) {
+      std::ofstream(tempdir.SpecjudgePath()) << problem["sjcode"].get<std::string>();
+    }
+    if (sub.interlib_type != InterlibType::NONE) {
+      std::ofstream(tempdir.InterlibPath()) << problem["interlib"].get<std::string>();
+    }
+
+    // testdata & limits
+    auto& td = data["td"];
+    sub.td_limits.resize(td.size(), Submission::TestdataLimit{});
+    td_count = td.size();
+    {
+      std::unordered_map<long, Testdata> orig_td;
+      std::unordered_set<long> new_td;
+      for (auto& i : db->iterate<Testdata>(where(c(&Testdata::problem_id) == sub.problem_id))) {
+        orig_td[i.testdata_id] = i;
+        if (i.order >= orig_td_count) orig_td_count = i.order + 1;
       }
-      if (it == orig_td.end() || it->second.order != i) {
-        to_update_position.push_back({i, td.testdata_id});
+      for (int i = 0; i < td_count; i++) {
+        // compare to determine which to download
+        auto& td_item = td[i];
+        Testdata td;
+        td.testdata_id = td_item["id"].get<int>();
+        td.timestamp = td_item["updated_at"].get<long>();
+        td.order = i;
+        td.problem_id = sub.problem_id;
+        auto it = orig_td.find(td.testdata_id);
+        if (it == orig_td.end() || it->second.timestamp != td.timestamp) {
+          to_download.push_back(td.testdata_id);
+        }
+        if (it == orig_td.end() || it->second.order != i) {
+          to_update_position.push_back({i, td.testdata_id});
+        }
+        new_meta.push_back(td);
+        new_td.insert(td.testdata_id);
+
+        // limits
+        auto& lim = sub.td_limits[i];
+        lim.time = td_item["time"].get<int64_t>();
+        lim.vss = td_item["vss"].get<int64_t>();
+        lim.rss = td_item["rss"].get<int64_t>();
+        lim.output = td_item["output"].get<int64_t>();
       }
-      new_meta.push_back(td);
-      new_td.insert(td.testdata_id);
+      for (auto& i : orig_td) {
+        if (!new_td.count(i.first)) to_delete.push_back(i.first);
+      }
     }
-    for (auto& i : orig_td) {
-      if (!new_td.count(i.first)) to_delete.push_back(i.first);
-    }
+    // TODO FEATURE(group): read tasks
+  } catch (json::exception& err) {
+    spdlog::warn("JSON parsing error: {}", err.what());
+    return false;
   }
   // download testdata
   for (long testdata_id : to_download) {
@@ -301,25 +313,14 @@ bool FetchOneSubmission() {
       fs::create_symlink(TdPoolPath(testdata_id, false, false), target_out, ec);
       if (ec) return false;
     }
+    // old symlinks
+    for (int i = td_count; i < orig_td_count; i++) {
+      fs::remove(TdInput(sub.problem_id, i), ec);
+      fs::remove(TdOutput(sub.problem_id, i), ec);
+    }
   }
   // update database meta
   db->replace_range(new_meta.begin(), new_meta.end());
-  // fetch limits
-  res = RequestRetry<HTTPGet>(cli, "/fetch/testdata_limit", problem_params, Headers());
-  if (!res) return false;
-  {
-    std::stringstream ss(res->body);
-    sub.td_limits.resize(td_count, Submission::TestdataLimit{});
-    for (auto& lim : sub.td_limits) {
-      if (!(ss >> lim.time >> lim.vss >> lim.output)) return false;
-      lim.rss = 0;
-      lim.time *= 1000;
-    }
-  }
-  // fetch submission
-  res = DownloadFile<HTTPGet>(tempdir.UserCodePath(), cli, "/fetch/code",
-      AddKey({{"sid", std::to_string(sub.submission_id)}}), Headers());
-  if (!res) return false;
   // finalize
   sub.submission_internal_id = GetUniqueSubmissionInternalId();
   sub.reporter = &server_reporter;
@@ -335,48 +336,49 @@ bool FetchOneSubmission() {
   return false;
 }
 
-void SendResult(const Submission& sub, bool done) {
-  std::string data;
-  Verdict ver = sub.verdict;
-  if (ver == Verdict::CE || ver == Verdict::CLE || ver == Verdict::ER) {
-    data = VerdictToAbr(ver);
-  } else {
-    for (size_t i = 0; i < sub.td_limits.size(); i++) {
-      if (i < sub.td_results.size()) {
-        auto& nowtd = sub.td_results[i];
-        data += fmt::format("{}/{}/{}/", VerdictToAbr(nowtd.verdict), nowtd.time / 1000, nowtd.rss);
-      } else {
-        data += "/0/0/";
-      }
-    }
+void SendResult(const Submission& sub) {
+  nlohmann::json data;
+  data["submission_id"] = sub.submission_id;
+  auto& tds = data["results"];
+  tds = nlohmann::json::array();
+  for (size_t i = 0; i < sub.td_results.size(); i++) {
+    auto& nowtd = sub.td_results[i];
+    if (nowtd.verdict == Verdict::NUL) continue;
+    tds.push_back(nlohmann::json{
+        {"position", i},
+        {"verdict", VerdictToAbr(nowtd.verdict)},
+        {"time", nowtd.time},
+        {"rss", nowtd.rss},
+        {"vss", nowtd.vss},
+        {"score", nowtd.score}});
   }
   Request req{};
-  if (!done) {
-    req.is_unique = true;
-    req.key = sub.submission_id;
-  }
-  req.is_post = false;
-  req.endpoint = "/fetch/write_result";
-  req.params = AddKey({{"sid", std::to_string(sub.submission_id)}, {"result", data},
-                       {"status", done ? "OK" : "NO"}});
+  req.is_unique = true;
+  req.key = sub.submission_id;
+  req.is_post = true;
+  req.endpoint = "/fetch/td_result";
+  req.body = std::move(data);
   PushRequest(std::move(req));
 }
 
-void SendCEMessage(const Submission& sub) {
+void SendFinalResult(const Submission& sub) {
+  nlohmann::json data{{"submission_id", sub.submission_id}, {"verdict", VerdictToAbr(sub.verdict)}};
+  if (sub.verdict == Verdict::CE || sub.verdict == Verdict::CLE) {
+    data["message"] = sub.ce_message;
+  }
   Request req{};
   req.is_post = true;
-  req.use_body = false;
-  req.endpoint = httplib::append_query_params("/fetch/write_message",
-      AddKey({{"sid", std::to_string(sub.submission_id)}}));
-  req.params = {{"message", sub.ce_message}};
+  req.endpoint = "/fetch/submission_result";
+  req.body = std::move(data);
   PushRequest(std::move(req));
 }
 
 void SendValidating(int submission_id) {
+  nlohmann::json data{{"submission_id", submission_id}, {"verdict", "Validating"}};
   Request req{};
-  req.is_post = false;
-  req.endpoint = "/fetch/validating";
-  req.params = AddKey({{"sid", std::to_string(submission_id)}});
+  req.is_post = true;
+  req.endpoint = "/fetch/submission_result";
+  req.body = std::move(data);
   PushRequest(std::move(req));
 }
 

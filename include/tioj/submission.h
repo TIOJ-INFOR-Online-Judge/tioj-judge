@@ -76,9 +76,10 @@ class Submission {
   long submission_internal_id;
   // submission information
   int submission_id;
-  int submitter_id;
+  long priority;
   int64_t submission_time; // UNIX timestamp
-  std::string submitter;
+  int submitter_id;
+  std::string submitter_name, submitter_nickname;
   Compiler lang;
   // problem information
   int problem_id;
@@ -111,7 +112,7 @@ class Submission {
   Reporter* reporter;
 
   Submission() :
-      submission_id(0), submitter_id(0), submission_time(0),
+      submission_id(0), submission_time(0), submitter_id(0),
       specjudge_type(SpecjudgeType::NORMAL),
       interlib_type(InterlibType::NONE),
       specjudge_lang(Compiler::GCC_CPP_17),
