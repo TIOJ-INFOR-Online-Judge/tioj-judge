@@ -140,6 +140,8 @@ bool SetupCompile(const Submission& sub, const TaskEntry& task) {
         case InterlibType::NONE: break;
         case InterlibType::INCLUDE: {
           Copy(SubmissionInterlibCode(id), CompileBoxInterlib(id, sub.problem_id), kPerm666);
+          Copy(SubmissionInterlibImplCode(id), CompileBoxInterlibImpl(id, sub.lang), kPerm666);
+          break;
         }
       }
       break;

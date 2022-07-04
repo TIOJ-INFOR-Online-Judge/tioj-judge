@@ -100,6 +100,10 @@ fs::path CompileBoxInterlib(long id, int problem_id, bool inside_box) {
   return Workdir(BoxRoot(CompileBoxPath(id, CompileSubtask::USERPROG), inside_box))
       / InterlibName(problem_id);
 }
+fs::path CompileBoxInterlibImpl(long id, Compiler lang, bool inside_box) {
+  return Workdir(BoxRoot(CompileBoxPath(id, CompileSubtask::USERPROG), inside_box))
+      / ("interlib" + CodeExtension(lang));
+}
 fs::path CompileBoxMessage(long id, CompileSubtask subtask, bool inside_box) {
   return Workdir(BoxRoot(CompileBoxPath(id, subtask), inside_box)) / "message";
 }
@@ -225,4 +229,7 @@ fs::path SubmissionJudgeCode(int id) {
 }
 fs::path SubmissionInterlibCode(int id) {
   return SubmissionCodePath(id) / "interlib";
+}
+fs::path SubmissionInterlibImplCode(int id) {
+  return SubmissionCodePath(id) / "interlib_impl";
 }

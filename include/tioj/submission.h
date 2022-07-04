@@ -23,7 +23,6 @@ enum class SpecjudgeType {
 #define ENUM_INTERLIB_TYPE_ \
   X(NONE) \
   X(INCLUDE)
-// TODO FEATURE(link): X(LINK)
 enum class InterlibType {
 #define X(name) name,
   ENUM_INTERLIB_TYPE_

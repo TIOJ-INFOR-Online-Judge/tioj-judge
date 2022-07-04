@@ -168,6 +168,7 @@ class TempDirectory { // RAII tempdir
   fs::path UserCodePath() const { return path_ / "code"; }
   fs::path SpecjudgePath() const { return path_ / "sjcode"; }
   fs::path InterlibPath() const { return path_ / "interlib"; }
+  fs::path InterlibImplPath() const { return path_ / "interlib_impl"; }
   TempDirectory() {
     char path[] = "/tmp/tmpsub.XXXXXX";
     char* res = mkdtemp(path);
@@ -227,6 +228,7 @@ bool FetchOneSubmission() {
     }
     if (sub.interlib_type != InterlibType::NONE) {
       std::ofstream(tempdir.InterlibPath()) << problem["interlib"].get<std::string>();
+      std::ofstream(tempdir.InterlibImplPath()) << problem["interlib_impl"].get<std::string>();
     }
 
     // testdata & limits
@@ -331,6 +333,7 @@ bool FetchOneSubmission() {
   }
   if (sub.interlib_type != InterlibType::NONE) {
     Move(tempdir.InterlibPath(), SubmissionInterlibCode(sub.submission_internal_id));
+    Move(tempdir.InterlibImplPath(), SubmissionInterlibImplCode(sub.submission_internal_id));
   }
   PushSubmission(std::move(sub));
   return false;

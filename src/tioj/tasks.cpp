@@ -15,7 +15,7 @@
 namespace {
 
 std::vector<std::string> GccCompileCommand(
-    Compiler lang, const std::string& input, const std::string& output, bool is_static) {
+    Compiler lang, const std::string& input, const std::string& interlib, const std::string& output, bool is_static) {
   std::string prog, std;
   switch (lang) {
     case Compiler::GCC_CPP_98: prog = "g++", std = "-std=c++98"; break;
@@ -31,6 +31,7 @@ std::vector<std::string> GccCompileCommand(
   std::vector<std::string> ret = {"/usr/bin/env", prog, std, "-O2", "-w"};
   if (is_static) ret.push_back("-static");
   ret.insert(ret.end(), {"-o", output, input});
+  if (!interlib.empty()) ret.push_back(interlib);
   if (prog == "gcc") ret.push_back("-lm");
   return ret;
 }
@@ -60,9 +61,17 @@ struct cjail_result RunCompile(const Submission& sub, const Task& task, int uid)
   CompileSubtask subtask = (CompileSubtask)task.subtask;
   spdlog::debug("Generating compile settings: id={} subid={}, subtask={}",
                 id, sub.submission_id, CompileSubtaskName(subtask));
+
+  std::string interlib;
   Compiler lang;
   switch (subtask) {
-    case CompileSubtask::USERPROG: lang = sub.lang; break;
+    case CompileSubtask::USERPROG: {
+      lang = sub.lang;
+      if (sub.interlib_type == InterlibType::INCLUDE) {
+        interlib = CompileBoxInterlibImpl(-1, lang, true);
+      }
+      break;
+    }
     case CompileSubtask::SPECJUDGE: lang = sub.specjudge_lang; break;
     default: __builtin_unreachable();
   }
@@ -80,7 +89,7 @@ struct cjail_result RunCompile(const Submission& sub, const Task& task, int uid)
     case Compiler::GCC_C_90: [[fallthrough]];
     case Compiler::GCC_C_98: [[fallthrough]];
     case Compiler::GCC_C_11:
-      opt.command = GccCompileCommand(lang, input, output, sub.sandbox_strict); break;
+      opt.command = GccCompileCommand(lang, input, interlib, output, sub.sandbox_strict); break;
     case Compiler::HASKELL: {
       opt.command = {"/usr/bin/env", "ghc", "-w", "-O", "-tmpdir", ".", "-o", output, input};
       if (sub.sandbox_strict) {
