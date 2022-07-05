@@ -1,7 +1,7 @@
 ## Current
 
 [x] Use new API
-[ ] README: Add libtioj
+[x] README: Add libtioj
 [ ] Provide Dockerfile
 [ ] Only allow a fixed number of submissions in queue
 

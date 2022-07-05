@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 
 project(tioj_judge VERSION 0.1 LANGUAGES CXX)
 set(SOVERSION 0)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 
 if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
@@ -15,12 +16,13 @@ set(CMAKE_CXX_FLAGS_DEBUG "-Og -g")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
 
 # options
-option(BUILD_SHARED_LIBS "Build using shared libraries" OFF)
 option(TIOJ_BUILD_TESTS "Build test programs" ON)
+option(TIOJ_INSTALL_LIBTIOJ "Install libtioj" ON)
+option(TIOJ_INSTALL_DEPENDENCIES "Install third-party public header files used by libtioj (nlohmann_json and cjail)" ON)
 
-if(NOT ${BUILD_SHARED_LIBS})
-  set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
-endif()
+# force build with static because sandbox-exec
+set(BUILD_SHARED_LIBS OFF)
+set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
 
 # configs
 set(TIOJ_DATA_DIR "/var/lib/tioj-judge/" CACHE PATH "Path of default testdata & scoring program location")
@@ -35,13 +37,14 @@ set(HTTPLIB_REQUIRE_OPENSSL ON)
 set(HTTPLIB_REQUIRE_ZLIB ON)
 set(HTTPLIB_COMPILE ON)
 set(JSON_MultipleHeaders ON)
+set(JSON_Install ON)
 set(BUILD_TESTING OFF) # for tortellini
 
-include(FetchContent)
+include(FetchContentExclude)
 FetchContent_Declare(
   cjail
   GIT_REPOSITORY "https://github.com/adrien1018/cjail.git"
-  GIT_TAG "522384819ba2087266d0ba473a7130590f914ac6"
+  GIT_TAG "b9b55208736b922589009b5702b48ac7b020b3da"
 )
 FetchContent_Declare(
   spdlog
@@ -73,23 +76,12 @@ FetchContent_Declare(
   URL "https://github.com/p-ranav/argparse/archive/refs/tags/v2.5.zip"
 )
 
-function (FetchContent_MakeAvailable_Exclude)
-  foreach(dep IN LISTS ARGV)
-    message(STATUS "Fetching ${dep}")
-    FetchContent_GetProperties(${dep})
-    if(NOT ${dep}_POPULATED)
-      FetchContent_Populate(${dep})
-      if(${dep} STREQUAL "spdlog" AND NOT DEFINED SPDLOG_PATCHED)
-        # hack spdlog
-        execute_process(COMMAND sed -i "s/^\\([^p].*mutex_;.*\\)$/public:\\1 private:/" ${${dep}_SOURCE_DIR}/include/spdlog/sinks/ansicolor_sink.h)
-        message(STATUS "Patched spdlog")
-        set(SPDLOG_PATCHED ON CACHE INTERNAL "")
-      endif()
-      add_subdirectory(${${dep}_SOURCE_DIR} ${${dep}_BINARY_DIR} EXCLUDE_FROM_ALL)
-    endif()
-  endforeach()
-endfunction()
-FetchContent_MakeAvailable_Exclude(cjail spdlog fmt json ini httplib sqlite_orm argparse)
+if(TIOJ_INSTALL_LIBTIOJ AND TIOJ_INSTALL_DEPENDENCIES)
+  FetchContent_MakeAvailable_Include(cjail json)
+else()
+  FetchContent_MakeAvailable_Exclude(cjail json)
+endif()
+FetchContent_MakeAvailable_Exclude(spdlog fmt ini httplib sqlite_orm argparse)
 
 # default scoring
 add_executable(default-scoring "tools/default-scoring.cpp")
@@ -112,13 +104,12 @@ install(DIRECTORY "${PROJECT_BINARY_DIR}/judge-headers" DESTINATION "${TIOJ_DATA
 
 # library
 # required for any program that uses libtioj
-set(TIOJ_DEPS nlohmann_json::nlohmann_json CJail::libcjail)
 add_subdirectory(src)
 
 # judge
 file(GLOB JUDGE_SRC "src/*.cpp" "src/*.h")
 add_executable(tioj-judge ${JUDGE_SRC})
-target_link_libraries(tioj-judge libtioj ${TIOJ_DEPS} spdlog::spdlog fmt::fmt tortellini httplib::httplib sqlite_orm::sqlite_orm argparse::argparse)
+target_link_libraries(tioj-judge libtioj spdlog::spdlog fmt::fmt tortellini httplib::httplib sqlite_orm::sqlite_orm argparse::argparse)
 install(TARGETS tioj-judge DESTINATION bin)
 
 # testing
@@ -133,7 +124,7 @@ if(TIOJ_BUILD_TESTS)
 
   file(GLOB TEST_SRC "test/*.cpp" "test/*.h")
   add_executable(judge-test ${TEST_SRC})
-  target_link_libraries(judge-test gtest_main libtioj ${TIOJ_DEPS} spdlog::spdlog)
+  target_link_libraries(judge-test gtest_main libtioj spdlog::spdlog)
 
   include(GoogleTest)
   gtest_discover_tests(judge-test)
