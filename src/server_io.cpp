@@ -260,6 +260,7 @@ bool DealOneSubmission(httplib::Client& cli, nlohmann::json&& data) {
         lim.vss = td_item["vss"].get<int64_t>();
         lim.rss = td_item["rss"].get<int64_t>();
         lim.output = td_item["output"].get<int64_t>();
+        lim.ignore_verdict = false;
       }
       for (auto& i : orig_td) {
         if (!new_td.count(i.first)) to_delete.push_back(i.first);

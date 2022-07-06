@@ -4,7 +4,7 @@
 [x] README: Add libtioj
 [x] Only allow a fixed number of submissions in queue
 [x] Set a maximum filesize / RSS limit
-[ ] Option to ignore some testdata in overall verdict
+[x] Option to ignore some testdata in overall verdict
 [ ] Provide Dockerfile
 [ ] Move DB operations from `server_io.cpp` to a separate file
 

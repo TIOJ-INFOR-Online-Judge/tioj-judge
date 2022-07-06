@@ -96,6 +96,7 @@ class Submission {
     int64_t vss, rss, output; // KiB
     int64_t time; // us
     // vss & rss can be zero if unlimited; output & time must always be set
+    bool ignore_verdict;
   };
   std::vector<TestdataLimit> td_limits;
   // TODO FEATURE(group): testdata group

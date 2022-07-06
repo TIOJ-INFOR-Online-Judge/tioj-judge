@@ -415,9 +415,12 @@ void FinalizeSubmission(Submission& sub, const TaskEntry& task) {
   if (sub.remove_submission) RemoveAll(SubmissionCodePath(id));
   RemoveAll(SubmissionRunPath(id));
   if (sub.td_results.size()) {
-    sub.verdict = (Verdict)std::max((int)sub.verdict,
-        (int)std::max_element(sub.td_results.begin(), sub.td_results.end(),
-            [](const auto& a, const auto& b){ return (int)a.verdict < (int)b.verdict; })->verdict);
+    sub.verdict = Verdict::AC;
+    for (size_t i = 0; i < sub.td_results.size(); i++) {
+      if (sub.td_limits[i].ignore_verdict) continue;
+      auto& td = sub.td_results[i];
+      if ((int)sub.verdict < (int)td.verdict) sub.verdict = td.verdict;
+    }
   }
   if (auto it = cancelled_list.find(id); it != cancelled_list.end()) {
     // cancelled, don't send anything to server
