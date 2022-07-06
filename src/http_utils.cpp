@@ -25,3 +25,7 @@ bool IsSuccess(int code) {
 }
 
 } // namespace http_utils
+
+bool IsSuccess(const httplib::Result& res) {
+  return res && http_utils::IsSuccess(res->status);
+}

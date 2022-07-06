@@ -277,11 +277,11 @@ bool DealOneSubmission(httplib::Client& cli, nlohmann::json&& data) {
     // input
     auto res = DownloadFile<HTTPGet>(TdPoolPath(testdata_id, true, true), cli, "/fetch/testdata",
         AddKey({{"tid", std::to_string(testdata_id)}, {"input", ""}}), Headers());
-    if (!res) return false;
+    if (!IsSuccess(res)) return false;
     // output
     res = DownloadFile<HTTPGet>(TdPoolPath(testdata_id, false, true), cli, "/fetch/testdata",
         AddKey({{"tid", std::to_string(testdata_id)}}), Headers());
-    if (!res) return false;
+    if (!IsSuccess(res)) return false;
   }
   // update symlinks
   {
@@ -350,7 +350,7 @@ bool FetchOneSubmission() {
   Client cli(kTIOJUrl);
   // fetch submission
   auto res = RequestRetry<HTTPGet>(cli, "/fetch/submission_new", AddKey({}), httplib::Headers());
-  if (!res) return false;
+  if (!IsSuccess(res)) return false;
 
   json data;
   int submission_id;

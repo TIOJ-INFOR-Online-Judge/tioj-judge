@@ -49,6 +49,8 @@ bool IsSuccess(int code);
 
 } // namespace http_utils
 
+bool IsSuccess(const httplib::Result& res);
+
 struct HTTPGet {
   constexpr static char method_name[] = "GET";
   template <class... T>
@@ -80,7 +82,7 @@ httplib::Result RequestRetryInit(
     init();
     last_res = std::make_unique<httplib::Result>(
             HTTPRequest<Method>(cli, endpoint, std::forward<T>(params)...));
-    if (*last_res && http_utils::IsSuccess((*last_res)->status)) return std::move(*last_res);
+    if (IsSuccess(*last_res)) return std::move(*last_res);
     spdlog::debug("Error code={} status={}", (int)last_res->error(), *last_res ? (*last_res)->status : -1);
     std::this_thread::sleep_for(1s);
   }

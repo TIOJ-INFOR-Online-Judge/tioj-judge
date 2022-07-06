@@ -41,6 +41,12 @@ max_submission_queue_size = 500
 
 Run `sudo tioj-judge` to start the judge.
 
+### Docker Usage
+
+A Dockerfile is provided to run the judge easily.
+
+When running the docker, `--privileged --net=host --pid=host` must be given, and a file containing the fetch key should be mount into `/run/secrets/judge-key`.
+
 ## Library
 
 A minimal working C++ example:

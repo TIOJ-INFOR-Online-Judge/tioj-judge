@@ -5,7 +5,7 @@
 [x] Only allow a fixed number of submissions in queue
 [x] Set a maximum filesize / RSS limit
 [x] Option to ignore some testdata in overall verdict
-[ ] Provide Dockerfile
+[x] Provide Dockerfile
 [ ] Move DB operations from `server_io.cpp` to a separate file
 
 ## Future
