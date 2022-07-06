@@ -356,6 +356,7 @@ bool FetchOneSubmission() {
   int submission_id;
   try {
     data = json::parse(res->body);
+    if (data.empty()) return false;
     submission_id = data["submission_id"].get<int>();
     // optionally reject submission here
   } catch (json::exception& err) {
@@ -381,13 +382,18 @@ void SendResult(const Submission& sub) {
   for (size_t i = 0; i < sub.td_results.size(); i++) {
     auto& nowtd = sub.td_results[i];
     if (nowtd.verdict == Verdict::NUL) continue;
-    tds.push_back(nlohmann::json{
+    nlohmann::json tddata{
         {"position", i},
         {"verdict", VerdictToAbr(nowtd.verdict)},
         {"time", nowtd.time},
         {"rss", nowtd.rss},
-        {"vss", nowtd.vss},
-        {"score", nowtd.score}});
+        {"score", nowtd.score}};
+    if (nowtd.vss == 0) {
+      tddata["vss"] = nullptr;
+    } else {
+      tddata["vss"] = nowtd.vss;
+    }
+    tds.push_back(std::move(tddata));
   }
   Request req{};
   req.is_unique = true;

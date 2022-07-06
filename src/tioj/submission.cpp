@@ -173,7 +173,9 @@ void FinalizeCompile(Submission& sub, const TaskEntry& task, const struct cjail_
 
   long id = sub.submission_internal_id;
   CompileSubtask subtask = (CompileSubtask)task.task.subtask;
-  if (res.timekill || res.oomkill > 0 || res.info.si_status != 0 ||
+  if (res.timekill == -1) {
+    sub.verdict = Verdict::JE;
+  } else if (res.timekill || res.oomkill > 0 || res.info.si_status != 0 ||
       !fs::is_regular_file(CompileBoxOutput(id, subtask, sub.lang))) {
     if (res.timekill || res.oomkill > 0) {
       sub.verdict = subtask == CompileSubtask::USERPROG ? Verdict::CLE : Verdict::ER;
