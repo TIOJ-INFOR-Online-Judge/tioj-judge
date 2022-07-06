@@ -21,6 +21,7 @@
 std::string kTIOJUrl = "";
 std::string kTIOJKey = "";
 double kFetchInterval = 1.0;
+int kMaxQueue = 500;
 
 namespace {
 
@@ -179,18 +180,12 @@ class TempDirectory { // RAII tempdir
   }
 };
 
-} // namespace
-
-bool FetchOneSubmission() {
+bool DealOneSubmission(httplib::Client& cli, nlohmann::json&& data) {
   using namespace httplib;
   using namespace sqlite_orm;
   using nlohmann::json;
 
   if (!db) db = std::make_unique<Storage>(InitDatabase());
-  Client cli(kTIOJUrl);
-  // fetch submission
-  auto res = RequestRetry<HTTPGet>(cli, "/fetch/submission_new", AddKey({}), Headers());
-  if (!res) return false;
 
   Submission sub;
   TempDirectory tempdir;
@@ -201,7 +196,6 @@ bool FetchOneSubmission() {
   std::vector<std::pair<int, long>> to_update_position;
   std::vector<Testdata> new_meta;
   try {
-    json data = json::parse(res->body);
     if (data.empty()) return false;
     sub.submission_id = data["submission_id"].get<int>();
     sub.priority = data["priority"].get<long>();
@@ -273,14 +267,14 @@ bool FetchOneSubmission() {
     }
     // TODO FEATURE(group): read tasks
   } catch (json::exception& err) {
-    spdlog::warn("JSON parsing error: {}", err.what());
+    spdlog::warn("Submission parsing error: {}", err.what());
     return false;
   }
   // download testdata
   for (long testdata_id : to_download) {
     if (!CreateDirs(TdPoolDir(testdata_id))) return false;
     // input
-    res = DownloadFile<HTTPGet>(TdPoolPath(testdata_id, true, true), cli, "/fetch/testdata",
+    auto res = DownloadFile<HTTPGet>(TdPoolPath(testdata_id, true, true), cli, "/fetch/testdata",
         AddKey({{"tid", std::to_string(testdata_id)}, {"input", ""}}), Headers());
     if (!res) return false;
     // output
@@ -323,9 +317,10 @@ bool FetchOneSubmission() {
   }
   // update database meta
   db->replace_range(new_meta.begin(), new_meta.end());
-  // finalize
+  // finalize & push
   sub.submission_internal_id = GetUniqueSubmissionInternalId();
   sub.reporter = &server_reporter;
+  sub.remove_submission = true;
   CreateDirs(SubmissionCodePath(sub.submission_internal_id));
   Move(tempdir.UserCodePath(), SubmissionUserCode(sub.submission_internal_id));
   if (sub.specjudge_type != SpecjudgeType::NORMAL) {
@@ -335,8 +330,46 @@ bool FetchOneSubmission() {
     Move(tempdir.InterlibPath(), SubmissionInterlibCode(sub.submission_internal_id));
     Move(tempdir.InterlibImplPath(), SubmissionInterlibImplCode(sub.submission_internal_id));
   }
+  // we only have one thread pushing submissions here, so no need to use
+  //   this race-prevent version to limit submission queue size
+  // if (!PushSubmission(std::move(sub), kMaxQueue)) {
+  //   RemoveAll(SubmissionCodePath(sub.submission_internal_id));
+  //   return false;
+  // }
   PushSubmission(std::move(sub));
-  return false;
+  return true;
+}
+
+} // namespace
+
+bool FetchOneSubmission() {
+  using namespace httplib;
+  using nlohmann::json;
+
+  Client cli(kTIOJUrl);
+  // fetch submission
+  auto res = RequestRetry<HTTPGet>(cli, "/fetch/submission_new", AddKey({}), httplib::Headers());
+  if (!res) return false;
+
+  json data;
+  int submission_id;
+  try {
+    data = json::parse(res->body);
+    submission_id = data["submission_id"].get<int>();
+    // optionally reject submission here
+  } catch (json::exception& err) {
+    spdlog::warn("JSON decoding error: {}", err.what());
+    return false;
+  }
+  if (!DealOneSubmission(cli, std::move(data))) {
+    // send JE
+    Submission sub;
+    sub.submission_id = submission_id;
+    sub.verdict = Verdict::JE;
+    SendFinalResult(sub);
+    return true;
+  }
+  return true;
 }
 
 void SendResult(const Submission& sub) {
@@ -389,7 +422,7 @@ void ServerWorkLoop() {
   std::thread thr(RequestLoop);
   thr.detach();
   while (true) {
-    FetchOneSubmission();
+    if (kMaxQueue > 0 && CurrentSubmissionQueueSize() < (size_t)kMaxQueue) FetchOneSubmission();
     std::this_thread::sleep_for(std::chrono::duration<double>(kFetchInterval));
   }
 }

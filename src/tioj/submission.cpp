@@ -17,6 +17,8 @@
 #include "paths.h"
 
 int kMaxParallel = 1;
+long kMaxRSS = 2 * 1024 * 1024; // 2G
+long kMaxOutput = 1 * 1024 * 1024; // 1G
 
 namespace {
 
@@ -226,7 +228,7 @@ bool SetupExecute(const Submission& sub, const TaskEntry& task) {
     long tmpfs_size_kib =
       (fs::file_size(CompileBoxOutput(id, CompileSubtask::USERPROG, sub.lang)) / 4096 + 1) * 4 +
       (fs::file_size(TdInput(sub.problem_id, subtask)) / 4096 + 1) * 4 +
-      sub.td_limits[subtask].output * 2;
+      std::min(sub.td_limits[subtask].output * 2, kMaxOutput);
     MountTmpfs(workdir, tmpfs_size_kib);
   }
   auto prog = ExecuteBoxProgram(id, subtask, sub.lang);
@@ -410,7 +412,7 @@ void FinalizeScoring(Submission& sub, const TaskEntry& task, const struct cjail_
 /// Submission tasks env teardown
 void FinalizeSubmission(Submission& sub, const TaskEntry& task) {
   long id = sub.submission_internal_id;
-  RemoveAll(SubmissionCodePath(id));
+  if (sub.remove_submission) RemoveAll(SubmissionCodePath(id));
   RemoveAll(SubmissionRunPath(id));
   if (sub.td_results.size()) {
     sub.verdict = (Verdict)std::max((int)sub.verdict,
@@ -500,7 +502,12 @@ void WorkLoop(bool loop) {
   } while (loop);
 }
 
-void PushSubmission(Submission&& sub) {
+size_t CurrentSubmissionQueueSize() {
+  std::lock_guard lck(task_mtx);
+  return submission_list.size();
+}
+
+bool PushSubmission(Submission&& sub, size_t max_queue) {
   // Build this dependency graph:
   //    compile_sj ------------+-----+
   //                           |     |
@@ -509,6 +516,9 @@ void PushSubmission(Submission&& sub) {
   //            |              |              |
   //            +-> execute_n -+-> scoring ---+
   //
+  std::unique_lock lck(task_mtx);
+  if (max_queue > 0 && submission_list.size() >= max_queue) return false;
+
   int id = sub.submission_internal_id;
   long priority = sub.priority;
   std::vector<TaskEntry> executes, scorings;
@@ -519,7 +529,6 @@ void PushSubmission(Submission&& sub) {
     Link(executes.back(), scorings.back());
     Link(scorings.back(), finalize);
   }
-  std::unique_lock lck(task_mtx);
   {
     TaskEntry compile(id, {TaskType::COMPILE, (int)CompileSubtask::USERPROG}, priority);
     for (auto& i : executes) Link(compile, i);
@@ -545,4 +554,5 @@ void PushSubmission(Submission&& sub) {
   spdlog::info("Submission enqueued: id={} sub_id={} prob_id={}", id, sub.submission_id, sub.problem_id);
   lck.unlock();
   task_cv.notify_one();
+  return true;
 }

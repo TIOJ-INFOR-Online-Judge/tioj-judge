@@ -114,9 +114,9 @@ struct cjail_result RunCompile(const Submission& sub, const Task& task, int uid)
   opt.fd_error = opt.fd_output;
   opt.uid = opt.gid = uid;
   opt.wall_time = 60L * 1'000'000;
-  opt.rss = 2L * 1024 * 1024; // 2G
+  opt.rss = kMaxRSS;
   opt.proc_num = 10;
-  opt.fsize = 1L * 1024 * 1024; // 1G
+  opt.fsize = kMaxOutput;
   opt.dirs = {"/usr", "/var/lib", "/lib", "/lib64", "/etc/alternatives", "/bin"};
   return SandboxExec(opt);
   // we don't need to close the opened files because the process is about to terminate
@@ -137,12 +137,14 @@ struct cjail_result RunExecute(const Submission& sub, const Task& task, int uid)
   opt.wall_time = std::max(long(lim.time * 1.2), lim.time + 1'000'000);
   opt.cpu_time = lim.time + 50'000; // a little bit of margin just in case
   opt.rss = lim.rss;
+  if (opt.rss == 0 || opt.rss > kMaxRSS) opt.rss = kMaxRSS;
   opt.vss = lim.vss ? lim.vss + 2048 : 0; // add some margin so we can determine whether it is MLE
   opt.proc_num = 1;
   // file limit is not needed since we have already limit the total size by mounting tmpfs
-  opt.fsize = lim.output;
+  opt.fsize = std::min(lim.output, kMaxOutput);
   if (sub.sandbox_strict) {
     if (sub.lang == Compiler::PYTHON2 || sub.lang == Compiler::PYTHON3) {
+      // TODO: is it possible to run without /usr/bin and /bin? (maybe copy python executable to workdir)
       opt.dirs = {"/usr", "/lib", "/lib64", "/etc/alternatives", "/bin"};
     }
     opt.fd_input = open(ExecuteBoxInput(id, subtask, sub.sandbox_strict).c_str(), O_RDONLY);
@@ -182,9 +184,9 @@ struct cjail_result RunScoring(const Submission& sub, const Task& task, int uid)
   opt.output = ScoringBoxOutput(-1, -1, true);
   opt.uid = opt.gid = uid;
   opt.wall_time = 60L * 1'000'000;
-  opt.rss = 2L * 1024 * 1024; // 2G
+  opt.rss = kMaxRSS;
   opt.proc_num = 10;
-  opt.fsize = 1L * 1024 * 1024; // 1G
+  opt.fsize = kMaxOutput;
   opt.dirs = {"/usr", "/var/lib", "/lib", "/lib64", "/etc/alternatives", "/bin"};
   return SandboxExec(opt);
 }

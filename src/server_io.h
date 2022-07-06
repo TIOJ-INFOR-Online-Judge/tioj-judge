@@ -7,6 +7,7 @@
 extern std::string kTIOJUrl;
 extern std::string kTIOJKey;
 extern double kFetchInterval;
+extern int kMaxQueue;
 
 // TODO FEATURE(web-update-2): currently the fetching process is queued -> validating (atomically set when fetched by any client)
 //   we need to change it to queued -> fetched (the original validating) -> validating (once start compiling)

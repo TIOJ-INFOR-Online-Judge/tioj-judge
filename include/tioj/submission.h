@@ -9,6 +9,9 @@
 #include "reporter.h"
 
 extern int kMaxParallel;
+// KiB
+extern long kMaxRSS;
+extern long kMaxOutput;
 
 #define ENUM_SPECJUDGE_TYPE_ \
   X(NORMAL) \
@@ -62,7 +65,8 @@ enum class Compiler {
   /* verdicts after compilation */ \
   X(CE, "CE", "Compile Error") \
   X(CLE, "CLE", "Compilation Limit Exceeded") \
-  X(ER, "ER", "WTF!")
+  X(ER, "ER", "Judge Compilation Error") \
+  X(JE, "JE", "Judge Error")
 enum class Verdict {
 #define X(name, abr, desc) name,
   ENUM_VERDICT_
@@ -86,10 +90,12 @@ class Submission {
   InterlibType interlib_type;
   Compiler specjudge_lang;
   bool sandbox_strict; // false for backward-compatability
+  bool remove_submission; // remove submission code after judge
   // task information
   struct TestdataLimit {
     int64_t vss, rss, output; // KiB
     int64_t time; // us
+    // vss & rss can be zero if unlimited; output & time must always be set
   };
   std::vector<TestdataLimit> td_limits;
   // TODO FEATURE(group): testdata group
@@ -116,6 +122,7 @@ class Submission {
       interlib_type(InterlibType::NONE),
       specjudge_lang(Compiler::GCC_CPP_17),
       sandbox_strict(false),
+      remove_submission(true),
       verdict(Verdict::NUL),
       reporter(nullptr) {}
 
@@ -124,7 +131,9 @@ class Submission {
 
 // Call from main thread
 void WorkLoop(bool loop = true);
+size_t CurrentSubmissionQueueSize();
 // Called from another thread
-void PushSubmission(Submission&&);
+// 0 = no limit; return false only if queue size exceeded
+bool PushSubmission(Submission&&, size_t max_queue = 0);
 
 #endif  // TIOJ_SUBMISSION_H_

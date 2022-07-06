@@ -26,6 +26,9 @@ bool ParseConfig(const fs::path& conf_path) {
   if (data_dir.size()) kDataDir = data_dir;
   kMaxParallel = ini[""]["parallel"] | kMaxParallel;
   kFetchInterval = ini[""]["fetch_interval"] | kFetchInterval;
+  kMaxRSS = (ini[""]["max_rss_per_task_mb"] | (kMaxRSS / 1024)) * 1024;
+  kMaxOutput = (ini[""]["max_output_per_task_mb"] | (kMaxRSS / 1024)) * 1024;
+  kMaxQueue = ini[""]["max_submission_queue_size"] | kMaxQueue;
   kTIOJUrl = ini[""]["tioj_url"] | kTIOJUrl;
   kTIOJKey = ini[""]["tioj_key"] | kTIOJKey;
   return true;

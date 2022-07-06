@@ -45,7 +45,7 @@ Verdict AbrToVerdict(const std::string& str, bool runtime_only) {
     if (str == kVerdictAbrTable[i]) return (Verdict)i;
   }
   if (runtime_only) return Verdict::NUL;
-  for (int i = (int)Verdict::CE; i <= (int)Verdict::ER; i++) {
+  for (int i = (int)Verdict::CE; i <= (int)Verdict::JE; i++) {
     if (str == kVerdictAbrTable[i]) return (Verdict)i;
   }
   return Verdict::NUL;
