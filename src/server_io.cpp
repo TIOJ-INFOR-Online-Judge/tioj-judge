@@ -101,7 +101,7 @@ class ServerReporter : public Reporter {
  public:
   // these functions should not block
   void ReportStartCompiling(const Submission& sub) override {
-    SendValidating(sub.submission_id);
+    SendStatus(sub.submission_id, "Validating");
   }
   void ReportOverallResult(const Submission& sub) override {
     SendFinalResult(sub);
@@ -172,6 +172,7 @@ bool DealOneSubmission(httplib::Client& cli, nlohmann::json&& data) {
   try {
     if (data.empty()) return false;
     sub.submission_id = data["submission_id"].get<int>();
+    sub.contest_id = data["contest_id"].get<int>();
     sub.priority = data["priority"].get<long>();
     sub.lang = GetCompiler(data["compiler"].get<std::string>());
     sub.submission_time = data["time"].get<int64_t>();
@@ -338,6 +339,7 @@ bool FetchOneSubmission() {
     if (data.empty()) return false;
     submission_id = data["submission_id"].get<int>();
     // optionally reject submission here
+    //  SendStatus(submission_id, "queued");
   } catch (json::exception& err) {
     spdlog::warn("JSON decoding error: {}", err.what());
     return false;
@@ -395,8 +397,8 @@ void SendFinalResult(const Submission& sub) {
   PushRequest(std::move(req));
 }
 
-void SendValidating(int submission_id) {
-  nlohmann::json data{{"submission_id", submission_id}, {"verdict", "Validating"}};
+void SendStatus(int submission_id, const std::string& status) {
+  nlohmann::json data{{"submission_id", submission_id}, {"verdict", status}};
   Request req{};
   req.is_post = true;
   req.endpoint = "/fetch/submission_result";

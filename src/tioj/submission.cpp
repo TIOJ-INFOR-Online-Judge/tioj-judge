@@ -37,6 +37,7 @@ nlohmann::json Submission::TestdataMeta(int subtask) const {
     {"user_output_file", ScoringBoxUserOutput(-1, -1, true)},
     {"user_code_file", ScoringBoxCode(-1, -1, lang, true)},
     {"problem_id", problem_id},
+    {"contest_id", contest_id},
     {"submission_id", submission_id},
     {"submitter_id", submitter_id},
     {"submitter_name", submitter_name},
