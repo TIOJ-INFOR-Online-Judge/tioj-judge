@@ -11,8 +11,8 @@
 #include <fmt/core.h>
 #include <fmt/ranges.h>
 #include <nlohmann/json.hpp>
-#include <sqlite_orm/sqlite_orm.h>
 
+#include "database.h"
 #include "http_utils.h"
 #include "tioj/paths.h"
 #include "tioj/utils.h"
@@ -37,34 +37,8 @@ fs::path TdPoolPath(long id, bool is_input, bool is_temp) {
   if (is_temp) name += ".tmp";
   return TdPoolDir(id) / name;
 }
-fs::path DatabasePath() {
-  return kDataDir / "db.sqlite";
-}
 
-// database
-// TODO FEATURE(web-refactor): add td limits
-struct Testdata {
-  int testdata_id;
-  int problem_id;
-  int order;
-  long timestamp;
-};
-
-inline auto InitDatabase() {
-  using namespace sqlite_orm;
-  auto storage = make_storage(DatabasePath(),
-      make_index("idx_testdata_problem_order", &Testdata::problem_id, &Testdata::order),
-      make_table("testdata",
-                 make_column("testdata_id", &Testdata::testdata_id, primary_key()),
-                 make_column("problem_id", &Testdata::problem_id),
-                 make_column("order", &Testdata::order),
-                 make_column("timestamp", &Testdata::timestamp)));
-  storage.sync_schema(true);
-  return storage;
-}
-
-using Storage = decltype(InitDatabase());
-std::unique_ptr<Storage> db;
+Database db;
 
 // web client
 struct Request {
@@ -185,7 +159,7 @@ bool DealOneSubmission(httplib::Client& cli, nlohmann::json&& data) {
   using namespace sqlite_orm;
   using nlohmann::json;
 
-  if (!db) db = std::make_unique<Storage>(InitDatabase());
+  db.Init();
 
   Submission sub;
   TempDirectory tempdir;
@@ -232,7 +206,7 @@ bool DealOneSubmission(httplib::Client& cli, nlohmann::json&& data) {
     {
       std::unordered_map<long, Testdata> orig_td;
       std::unordered_set<long> new_td;
-      for (auto& i : db->iterate<Testdata>(where(c(&Testdata::problem_id) == sub.problem_id))) {
+      for (auto& i : db.ProblemTd(sub.problem_id)) {
         orig_td[i.testdata_id] = i;
         if (i.order >= orig_td_count) orig_td_count = i.order + 1;
       }
@@ -260,6 +234,11 @@ bool DealOneSubmission(httplib::Client& cli, nlohmann::json&& data) {
         lim.vss = td_item["vss"].get<int64_t>();
         lim.rss = td_item["rss"].get<int64_t>();
         lim.output = td_item["output"].get<int64_t>();
+        if (sub.lang == Compiler::HASKELL && lim.vss > 0) {
+          // Haskell uses a lot of VSS, thus we limit RSS instead
+          lim.rss = lim.rss == 0 ? lim.vss : std::min(lim.vss, lim.rss);
+          lim.vss = 0;
+        }
         lim.ignore_verdict = false;
       }
       for (auto& i : orig_td) {
@@ -317,7 +296,7 @@ bool DealOneSubmission(httplib::Client& cli, nlohmann::json&& data) {
     }
   }
   // update database meta
-  db->replace_range(new_meta.begin(), new_meta.end());
+  db.UpdateTd(new_meta);
   // finalize & push
   sub.submission_internal_id = GetUniqueSubmissionInternalId();
   sub.reporter = &server_reporter;

@@ -6,7 +6,7 @@
 [x] Set a maximum filesize / RSS limit
 [x] Option to ignore some testdata in overall verdict
 [x] Provide Dockerfile
-[ ] Move DB operations from `server_io.cpp` to a separate file
+[x] Move DB operations from `server_io.cpp` to a separate file
 
 ## Future
 
