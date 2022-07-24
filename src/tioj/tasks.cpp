@@ -182,6 +182,7 @@ struct cjail_result RunScoring(const Submission& sub, const Task& task, int uid)
   }
   opt.workdir = Workdir("/");
   opt.output = ScoringBoxOutput(-1, -1, true);
+  opt.error = "/dev/null";
   opt.uid = opt.gid = uid;
   opt.wall_time = 60L * 1'000'000;
   opt.rss = kMaxRSS;
