@@ -39,7 +39,7 @@ enum class InterlibType {
   X(GCC_CPP_17, "c++17") \
   X(GCC_CPP_20, "c++20") \
   X(GCC_C_90, "c90") \
-  X(GCC_C_98, "c98") \
+  X(GCC_C_99, "c99") \
   X(GCC_C_11, "c11") \
   X(HASKELL, "haskell") \
   X(PYTHON2, "python2") \

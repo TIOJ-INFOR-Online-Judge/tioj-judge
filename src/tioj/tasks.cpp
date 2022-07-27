@@ -24,7 +24,7 @@ std::vector<std::string> GccCompileCommand(
     case Compiler::GCC_CPP_17: prog = "g++", std = "-std=c++17"; break;
     case Compiler::GCC_CPP_20: prog = "g++", std = "-std=c++20"; break;
     case Compiler::GCC_C_90: prog = "gcc", std = "-ansi"; break;
-    case Compiler::GCC_C_98: prog = "gcc", std = "-std=c98"; break;
+    case Compiler::GCC_C_99: prog = "gcc", std = "-std=c99"; break;
     case Compiler::GCC_C_11: prog = "gcc", std = "-std=c11"; break;
     default: __builtin_unreachable();
   }
@@ -44,7 +44,7 @@ std::vector<std::string> ExecuteCommand(Compiler lang, const std::string& progra
     case Compiler::GCC_CPP_17: [[fallthrough]];
     case Compiler::GCC_CPP_20: [[fallthrough]];
     case Compiler::GCC_C_90: [[fallthrough]];
-    case Compiler::GCC_C_98: [[fallthrough]];
+    case Compiler::GCC_C_99: [[fallthrough]];
     case Compiler::GCC_C_11: [[fallthrough]];
     case Compiler::HASKELL: return {program};
     case Compiler::PYTHON2: return {"/usr/bin/env", "python2", program};
@@ -87,7 +87,7 @@ struct cjail_result RunCompile(const Submission& sub, const Task& task, int uid)
     case Compiler::GCC_CPP_17: [[fallthrough]];
     case Compiler::GCC_CPP_20: [[fallthrough]];
     case Compiler::GCC_C_90: [[fallthrough]];
-    case Compiler::GCC_C_98: [[fallthrough]];
+    case Compiler::GCC_C_99: [[fallthrough]];
     case Compiler::GCC_C_11:
       opt.command = GccCompileCommand(lang, input, interlib, output, sub.sandbox_strict); break;
     case Compiler::HASKELL: {
@@ -174,8 +174,8 @@ struct cjail_result RunScoring(const Submission& sub, const Task& task, int uid)
       ScoringBoxUserOutput(-1, -1, true),
       ScoringBoxTdInput(-1, -1, true),
       ScoringBoxTdOutput(-1, -1, true),
-      ScoringBoxCode(-1, -1, sub.lang, true),
       CompilerName(sub.lang),
+      ScoringBoxCode(-1, -1, sub.lang, true),
     });
   } else {
     opt.command.push_back(ScoringBoxMetaFile(-1, -1, true));

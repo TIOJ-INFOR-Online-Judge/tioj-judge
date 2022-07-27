@@ -26,7 +26,7 @@ inline std::string CodeExtension(Compiler lang) {
     case Compiler::GCC_CPP_17: [[fallthrough]];
     case Compiler::GCC_CPP_20: return ".cpp";
     case Compiler::GCC_C_90: [[fallthrough]];
-    case Compiler::GCC_C_98: [[fallthrough]];
+    case Compiler::GCC_C_99: [[fallthrough]];
     case Compiler::GCC_C_11: return ".c";
     case Compiler::HASKELL: return ".hs";
     case Compiler::PYTHON2: [[fallthrough]];
@@ -43,7 +43,7 @@ inline std::string ProgramExtension(Compiler lang) {
     case Compiler::GCC_CPP_17: [[fallthrough]];
     case Compiler::GCC_CPP_20: [[fallthrough]];
     case Compiler::GCC_C_90: [[fallthrough]];
-    case Compiler::GCC_C_98: [[fallthrough]];
+    case Compiler::GCC_C_99: [[fallthrough]];
     case Compiler::GCC_C_11: return "";
     case Compiler::HASKELL: return "";
     case Compiler::PYTHON2: [[fallthrough]];
@@ -128,7 +128,7 @@ fs::perms ExecuteBoxProgramPerm(Compiler lang, bool strict) {
     case Compiler::GCC_CPP_17: [[fallthrough]];
     case Compiler::GCC_CPP_20: [[fallthrough]];
     case Compiler::GCC_C_90: [[fallthrough]];
-    case Compiler::GCC_C_98: [[fallthrough]];
+    case Compiler::GCC_C_99: [[fallthrough]];
     case Compiler::GCC_C_11:
       return fs::perms::owner_all | fs::perms::group_exec | fs::perms::others_exec; // 711
     case Compiler::HASKELL:

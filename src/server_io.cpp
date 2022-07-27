@@ -410,7 +410,9 @@ void ServerWorkLoop() {
   std::thread thr(RequestLoop);
   thr.detach();
   while (true) {
-    if (kMaxQueue > 0 && CurrentSubmissionQueueSize() < (size_t)kMaxQueue) FetchOneSubmission();
+    if (kMaxQueue > 0 && CurrentSubmissionQueueSize() < (size_t)kMaxQueue) {
+      if (FetchOneSubmission()) continue;
+    }
     std::this_thread::sleep_for(std::chrono::duration<double>(kFetchInterval));
   }
 }
