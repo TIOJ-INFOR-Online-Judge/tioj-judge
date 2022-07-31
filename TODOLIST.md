@@ -7,9 +7,12 @@
 [x] Option to ignore some testdata in overall verdict
 [x] Provide Dockerfile
 [x] Move DB operations from `server_io.cpp` to a separate file
+[ ] Fix job counting bug
+[ ] Multistage problems
 
 ## Future
 
+[ ] I/O Interactive & output-only
 [ ] Periodically clear testdata for recently unused problems
 [ ] Add option to stop on first non-AC testdata of each task
 [ ] Linear time calibration by a reference program (for multiple judge servers)

@@ -54,9 +54,10 @@ struct Request {
 using ParItem = httplib::Params::value_type;
 
 void DoRequest(const Request& req) {
+  using nlohmann::json;
   httplib::Client cli(kTIOJUrl);
   if (req.is_post) {
-    RequestRetry<HTTPPost>(cli, req.endpoint, req.body.dump(), "application/json");
+    RequestRetry<HTTPPost>(cli, req.endpoint, req.body.dump(-1, ' ', false, json::error_handler_t::ignore), "application/json");
   } else {
     RequestRetry<HTTPGet>(cli, req.endpoint, req.params, httplib::Headers());
   }
@@ -240,7 +241,7 @@ bool DealOneSubmission(httplib::Client& cli, nlohmann::json&& data) {
           lim.rss = lim.rss == 0 ? lim.vss : std::min(lim.vss, lim.rss);
           lim.vss = 0;
         }
-        lim.ignore_verdict = false;
+        lim.ignore_verdict = td_item["verdict_ignore"].get<bool>();
       }
       for (auto& i : orig_td) {
         if (!new_td.count(i.first)) to_delete.push_back(i.first);

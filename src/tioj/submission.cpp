@@ -135,6 +135,8 @@ bool SetupCompile(const Submission& sub, const TaskEntry& task) {
   if (sub.reporter) sub.reporter->ReportStartCompiling(sub);
   long id = sub.submission_internal_id;
   CompileSubtask subtask = (CompileSubtask)task.task.subtask;
+  if (cancelled_list.count(id)) return false; // cancellation check
+
   CreateDirs(Workdir(CompileBoxPath(id, subtask)), fs::perms::all);
   switch (subtask) {
     case CompileSubtask::USERPROG: {
@@ -225,6 +227,7 @@ bool SetupExecute(const Submission& sub, const TaskEntry& task) {
   long id = sub.submission_internal_id;
   int subtask = task.task.subtask;
   if (cancelled_list.count(id)) return false; // cancellation check
+
   auto workdir = Workdir(ExecuteBoxPath(id, subtask));
   CreateDirs(workdir);
   if (!sub.sandbox_strict) { // for non-strict: mount a tmpfs to limit overall filesize
@@ -310,6 +313,7 @@ bool SetupScoring(const Submission& sub, const TaskEntry& task) {
   long id = sub.submission_internal_id;
   int subtask = task.task.subtask;
   if (cancelled_list.count(id)) return false; // cancellation check
+
   // if already TLE/MLE/etc, do not invoke old-style special judge
   if (sub.td_results[subtask].verdict != Verdict::NUL &&
       sub.specjudge_type != SpecjudgeType::SPECJUDGE_NEW) {
@@ -429,9 +433,9 @@ void FinalizeSubmission(Submission& sub, const TaskEntry& task) {
     // cancelled, don't send anything to server
     cancelled_list.erase(it);
   } else {
-    spdlog::info("Submission finished: id={} sub_id={}", id, sub.submission_id);
     if (sub.reporter) sub.reporter->ReportOverallResult(sub);
   }
+  spdlog::info("Submission finished: id={} sub_id={} list_size={}", id, sub.submission_id, submission_list.size());
   submission_id_map.erase(id);
   submission_list.erase(id);
 }
@@ -557,7 +561,7 @@ bool PushSubmission(Submission&& sub, size_t max_queue) {
     cancelled_list.insert(it.first->second);
     it.first->second = id;
   }
-  spdlog::info("Submission enqueued: id={} sub_id={} prob_id={}", id, sub.submission_id, sub.problem_id);
+  spdlog::info("Submission enqueued: id={} sub_id={} prob_id={} list_size={}", id, sub.submission_id, sub.problem_id, submission_list.size());
   lck.unlock();
   task_cv.notify_one();
   return true;
