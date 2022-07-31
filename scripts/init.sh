@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 TIOJ_URL="${TIOJ_URL:-http://localhost}"
-TIOJ_KEY="$(head -1 /run/secrets/judge-key)"
+TIOJ_KEY="${TIOJ_KEY:-example_key}"
 JUDGE_PARALLEL="${JUDGE_PARALLEL:-2}"
 JUDGE_FETCH_INTERVAL="${JUDGE_FETCH_INTERVAL:-1}"
 JUDGE_MAX_RSS_PER_TASK_MB="${JUDGE_MAX_RSS_PER_TASK_MB:-2048}"
