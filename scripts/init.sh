@@ -18,4 +18,4 @@ max_output_per_task_mb = $JUDGE_MAX_OUTPUT_PER_TASK_MB
 max_submission_queue_size = $JUDGE_MAX_SUBMISSION_QUEUE_SIZE
 EOF
 
-exec tioj-judge
+exec tioj-judge "$@"

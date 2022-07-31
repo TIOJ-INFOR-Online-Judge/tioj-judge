@@ -22,4 +22,4 @@ RUN ninja && ninja install
 
 WORKDIR /judge
 
-CMD /judge/scripts/init.sh
+CMD ["/judge/scripts/init.sh", "-v"]
