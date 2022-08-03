@@ -2,6 +2,8 @@
 
 #include <unistd.h>
 #include <cstring>
+#include <algorithm>
+#include <filesystem>
 
 SandboxOptions::SandboxOptions(const std::vector<uint8_t>& vec) {
   size_t cur = 0;
@@ -43,6 +45,11 @@ SandboxOptions::SandboxOptions(const std::vector<uint8_t>& vec) {
   fsize = ReadInt();
   dirs.resize(ReadInt());
   for (auto& i : dirs) i = ReadString();
+}
+
+void SandboxOptions::FilterDirs() {
+  dirs.resize(std::remove_if(dirs.begin(), dirs.end(), [](const std::string& path){
+      return !std::filesystem::exists(path); }) - dirs.begin());
 }
 
 std::vector<uint8_t> SandboxOptions::Serialize() const {

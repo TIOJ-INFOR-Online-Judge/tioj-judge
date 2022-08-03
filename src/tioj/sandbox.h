@@ -57,6 +57,7 @@ class SandboxOptions {
       fsize(0) {}
   SandboxOptions(const std::vector<uint8_t>& serial);
 
+  void FilterDirs();
   // platform dependent, only intended for same machine
   std::vector<uint8_t> Serialize() const;
   // the result is invalidated after reassignment/reallocation of any string/vector member

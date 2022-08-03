@@ -118,6 +118,7 @@ struct cjail_result RunCompile(const Submission& sub, const Task& task, int uid)
   opt.proc_num = 10;
   opt.fsize = kMaxOutput;
   opt.dirs = {"/usr", "/var/lib", "/lib", "/lib64", "/etc/alternatives", "/bin"};
+  opt.FilterDirs();
   return SandboxExec(opt);
   // we don't need to close the opened files because the process is about to terminate
 }
@@ -156,6 +157,7 @@ struct cjail_result RunExecute(const Submission& sub, const Task& task, int uid)
     opt.output = ExecuteBoxOutput(-1, -1, sub.sandbox_strict, true);
     opt.error = ExecuteBoxError(-1, -1, true);
   }
+  opt.FilterDirs();
   return SandboxExec(opt);
   // we don't need to close the opened files because the process is about to terminate
 }
@@ -189,6 +191,7 @@ struct cjail_result RunScoring(const Submission& sub, const Task& task, int uid)
   opt.proc_num = 10;
   opt.fsize = kMaxOutput;
   opt.dirs = {"/usr", "/var/lib", "/lib", "/lib64", "/etc/alternatives", "/bin"};
+  opt.FilterDirs();
   return SandboxExec(opt);
 }
 
