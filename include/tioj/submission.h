@@ -135,7 +135,12 @@ class Submission {
 
 // Call from main thread
 void WorkLoop(bool loop = true);
+
+// Judge queue information; DO NOT call these in reporter because of deadlocks!
 size_t CurrentSubmissionQueueSize();
+// External ID, for server communication
+std::vector<int> GetQueuedSubmissionID();
+
 // Called from another thread
 // 0 = no limit; return false only if queue size exceeded
 bool PushSubmission(Submission&&, size_t max_queue = 0);

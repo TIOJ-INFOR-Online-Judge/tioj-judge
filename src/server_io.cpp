@@ -13,6 +13,7 @@
 #include <nlohmann/json.hpp>
 
 #include "database.h"
+#include "websocket.h"
 #include "http_utils.h"
 #include "tioj/paths.h"
 #include "tioj/utils.h"
@@ -20,12 +21,13 @@
 
 std::string kTIOJUrl = "";
 std::string kTIOJKey = "";
-double kFetchInterval = 1.0;
-int kMaxQueue = 500;
+size_t kMaxQueue = 20;
 
 namespace {
 
-// paths
+const std::string kChannelIdentifier = "{\"channel\":\"FetchChannel\"}";
+
+/// --- paths & helpers ---
 fs::path TdPool() {
   return kDataDir / "td-pool";
 }
@@ -38,58 +40,71 @@ fs::path TdPoolPath(long id, bool is_input, bool is_temp) {
   return TdPoolDir(id) / name;
 }
 
+inline double MonotonicTimestamp() {
+  auto dur = std::chrono::steady_clock::now().time_since_epoch();
+  return std::chrono::duration<double>(dur).count();
+}
+
+/// --- database ---
 Database db;
 
-// web client
+/// --- websocket client ---
+constexpr double kUniqueReqMinInterval = 0.6;
+
+// outgoing requests
 struct Request {
-  bool is_unique; //
-  long key;       // for redundant elimination
-  bool is_post;
-  bool use_body;
-  std::string endpoint;
-  httplib::Params params; // only if not is_post
-  nlohmann::json body; // only if is_post; key will be added automatically
+  bool is_subscribe;
+  bool is_unique;
+  bool force_pop; // if force_pop, pop is_unique's with current key
+  long key;
+  std::string action;
+  nlohmann::json body;
+
+  std::string ToRequest() const {
+    using nlohmann::json;
+    json ret{{"identifier", kChannelIdentifier}, {"command", is_subscribe ? "subscribe" : "message"}};
+    if (!is_subscribe) {
+      json nbody(body);
+      nbody["action"] = action;
+      ret["data"] = nbody.dump(-1, ' ', false, json::error_handler_t::ignore);
+    }
+    return ret.dump();
+  }
 };
 
-using ParItem = httplib::Params::value_type;
-
-void DoRequest(const Request& req) {
-  using nlohmann::json;
-  httplib::Client cli(kTIOJUrl);
-  if (req.is_post) {
-    RequestRetry<HTTPPost>(cli, req.endpoint, req.body.dump(-1, ' ', false, json::error_handler_t::ignore), "application/json");
-  } else {
-    RequestRetry<HTTPGet>(cli, req.endpoint, req.params, httplib::Headers());
-  }
-}
-
-std::list<Request> request_queue;
-std::unordered_map<long, std::list<Request>::iterator> request_map;
-std::mutex request_queue_mtx;
+std::set<std::pair<double, long>> unsent_timestamps;
+std::unordered_map<long, double> unique_timestamp_map;
+std::unordered_map<long, Request> unique_requests;
+std::list<Request> request_queue, backup_queue;
+std::mutex request_queue_mtx, backup_queue_mtx;
 std::condition_variable request_queue_cv;
-void RequestLoop() {
-  std::unique_lock lck(request_queue_mtx);
-  while (true) {
-    request_queue_cv.wait(lck, [](){ return request_queue.size(); });
-    Request req = std::move(request_queue.front());
-    if (req.is_unique) request_map.erase(req.key);
-    request_queue.pop_front();
-    lck.unlock();
-    DoRequest(req);
-    lck.lock();
-  }
-}
 
 void PushRequest(Request&& req) {
-  if (req.is_post) req.body["key"] = kTIOJKey;
   {
     std::lock_guard lck(request_queue_mtx);
     if (req.is_unique) {
-      if (auto it = request_map.find(req.key); it != request_map.end()) {
-        *(it->second) = std::move(req);
+      if (auto it = unique_requests.find(req.key); it != unique_requests.end()) {
+        // a request of same id waiting; replace
+        it->second = std::move(req);
+      } else if (auto it = unique_timestamp_map.find(req.key); it != unique_timestamp_map.end()) {
+        // no request of same id waiting but one is sent previously; insert it
+        unsent_timestamps.insert({it->second, req.key});
+        unique_requests.insert({req.key, std::move(req)});
       } else {
-        request_map[req.key] = request_queue.insert(request_queue.end(), std::move(req));
+        // first encounter of the id
+        unsent_timestamps.insert({0.0, req.key});
+        unique_timestamp_map[req.key] = 0.0;
+        unique_requests.insert({req.key, std::move(req)});
       }
+    } else if (req.force_pop) {
+      if (auto it = unique_timestamp_map.find(req.key); it != unique_timestamp_map.end()) {
+        unsent_timestamps.erase({it->second, req.key});
+        // unique_timestamp_map will be erased at sent
+        unique_requests.erase(req.key);
+      }
+      request_queue.push_back(std::move(req));
+    } else if (req.is_subscribe) {
+      request_queue.push_front(std::move(req));
     } else {
       request_queue.push_back(std::move(req));
     }
@@ -97,7 +112,144 @@ void PushRequest(Request&& req) {
   request_queue_cv.notify_one();
 }
 
-// reporter
+bool CheckUniqueRequests() {
+  double ts = MonotonicTimestamp();
+  while (unsent_timestamps.size()) {
+    auto it = unsent_timestamps.begin();
+    if (it->first >= ts - kUniqueReqMinInterval) break;
+    auto req = unique_requests.find(it->second); // should always exist
+    request_queue.push_back(std::move(req->second));
+    unsent_timestamps.erase(it);
+    unique_requests.erase(req);
+  }
+  return request_queue.size();
+}
+
+void ResendBackupRequests() {
+  std::scoped_lock lck(backup_queue_mtx, request_queue_mtx);
+  request_queue.splice(request_queue.begin(), backup_queue);
+}
+
+// judge requests
+std::mutex judge_mtx;
+
+bool DealOneSubmission(nlohmann::json&& data);
+
+void OneSubmissionThread(nlohmann::json&& data) {
+  int submission_id = data["submission_id"].get<int>();
+  std::lock_guard lck(judge_mtx);
+  // optionally reject submission here
+  if (CurrentSubmissionQueueSize() >= kMaxQueue) {
+    SendStatus(submission_id, "queued");
+    return;
+  }
+  TryFetchSubmission();
+  if (!DealOneSubmission(std::move(data))) {
+    // send JE
+    Submission sub;
+    sub.submission_id = submission_id;
+    sub.verdict = Verdict::JE;
+    SendFinalResult(sub);
+  }
+}
+
+// websocket class
+class TIOJClient : public WsClient {
+  void ReconnectThread_() {
+    ResendBackupRequests();
+    std::thread([this]() {
+      std::this_thread::sleep_for(std::chrono::seconds(3));
+      Connect();
+    }).detach();
+  }
+ public:
+  // TODO: escape TIOJKey
+  TIOJClient() : WsClient("ws" + kTIOJUrl.substr(4) + "/cable?key=" + kTIOJKey) {}
+
+  double last_ping = 0;
+
+  void OnOpen() override {
+    spdlog::info("Connected to server websocket");
+    last_ping = MonotonicTimestamp();
+    Request req{};
+    req.is_subscribe = true;
+    PushRequest(std::move(req));
+    TryFetchSubmission();
+  }
+
+  void OnFail() override {
+    spdlog::warn("Failed to connect to server, reconnect in 3 seconds");
+    ReconnectThread_();
+  }
+  void OnClose() override {
+    spdlog::warn("Connection with server closed, reconnect in 3 seconds");
+    ReconnectThread_();
+  }
+
+  void OnMessage(const std::string& msg) override {
+    using nlohmann::json;
+    {
+      std::lock_guard lck(backup_queue_mtx);
+      backup_queue.clear();
+    }
+    json data;
+    std::string msg_type;
+    try {
+      data = json::parse(msg);
+      last_ping = MonotonicTimestamp();
+      spdlog::debug("Message from server: {}", msg);
+      if (data.contains("type")) return; // confirm_subscription or ping
+      msg_type = data["message"]["type"].get<std::string>();
+    } catch (json::exception& err) {
+      spdlog::warn("JSON decoding error: {}", err.what());
+      return;
+    }
+    if (msg_type == "notify") {
+      TryFetchSubmission();
+    } else if (msg_type == "submission") {
+      std::thread(OneSubmissionThread, std::move(data["message"]["data"])).detach();
+    }
+  }
+
+  bool Send(const std::string& msg) {
+    bool ret = WsClient::Send(msg);
+    spdlog::debug("Send message: {}, result={}", msg, ret);
+    return ret;
+  }
+};
+
+// This function deal with all outgoing messages
+void RequestLoop() {
+  TIOJClient cli;
+  cli.Connect();
+  std::unique_lock lck(request_queue_mtx);
+  while (true) {
+    request_queue_cv.wait_for(lck, std::chrono::duration<double>(kUniqueReqMinInterval / 2),
+        [&cli](){ return cli.CanSend() && CheckUniqueRequests(); });
+    if (cli.CanSend() && cli.last_ping > 0 && MonotonicTimestamp() - cli.last_ping > 8) {
+      cli.Close();
+      continue;
+    }
+    while (request_queue.size()) {
+      Request req = std::move(request_queue.front());
+      if (req.is_unique) {
+        unique_timestamp_map[req.key] = MonotonicTimestamp();
+      } else if (req.force_pop) {
+        unique_timestamp_map.erase(req.key);
+      }
+      request_queue.pop_front();
+      lck.unlock();
+      cli.Send(req.ToRequest());
+      {
+        std::lock_guard lck(backup_queue_mtx);
+        backup_queue.push_back(std::move(req));
+      }
+      lck.lock();
+    }
+  }
+}
+
+/// --- reporter ---
 class ServerReporter : public Reporter {
  public:
   // these functions should not block
@@ -110,12 +262,15 @@ class ServerReporter : public Reporter {
   void ReportScoringResult(const Submission& sub, int subtask) override {
     SendResult(sub);
   }
-  void ReportCEMessage(const Submission& sub) override {
-    // do nothing; since ReportOverallResult will send the message anyways
+  void ReportCEMessage(const Submission&) override {
+    // do nothing; ReportOverallResult will send the message anyways
+  }
+  void ReportFinalized(const Submission&, size_t queue_size_before_pop) override {
+    if (queue_size_before_pop == kMaxQueue) TryFetchSubmission();
   }
 } server_reporter;
 
-// helper
+// --- helpers ---
 template <class Method, class... T>
 inline auto DownloadFile(const fs::path& path, T&&... params) {
   std::ofstream fout;
@@ -155,11 +310,12 @@ class TempDirectory { // RAII tempdir
   }
 };
 
-bool DealOneSubmission(httplib::Client& cli, nlohmann::json&& data) {
+bool DealOneSubmission(nlohmann::json&& data) {
   using namespace httplib;
   using namespace sqlite_orm;
   using nlohmann::json;
 
+  Client cli(kTIOJUrl);
   db.Init();
 
   Submission sub;
@@ -312,55 +468,12 @@ bool DealOneSubmission(httplib::Client& cli, nlohmann::json&& data) {
     Move(tempdir.InterlibPath(), SubmissionInterlibCode(sub.submission_internal_id));
     Move(tempdir.InterlibImplPath(), SubmissionInterlibImplCode(sub.submission_internal_id));
   }
-  // we only have one thread pushing submissions here, so no need to use
-  //   this race-prevent version to limit submission queue size
-  // if (!PushSubmission(std::move(sub), kMaxQueue)) {
-  //   RemoveAll(SubmissionCodePath(sub.submission_internal_id));
-  //   return false;
-  // }
   PushSubmission(std::move(sub));
   return true;
 }
 
-} // namespace
-
-bool FetchOneSubmission() {
-  using namespace httplib;
-  using nlohmann::json;
-
-  Client cli(kTIOJUrl);
-  // fetch submission
-  auto res = RequestRetry<HTTPGet>(cli, "/fetch/submission_new", AddKey({}), httplib::Headers());
-  if (!IsSuccess(res)) return false;
-
-  json data;
-  int submission_id;
-  try {
-    data = json::parse(res->body);
-    if (data.empty()) return false;
-    submission_id = data["submission_id"].get<int>();
-    // optionally reject submission here
-    //  SendStatus(submission_id, "queued");
-  } catch (json::exception& err) {
-    spdlog::warn("JSON decoding error: {}", err.what());
-    return false;
-  }
-  if (!DealOneSubmission(cli, std::move(data))) {
-    // send JE
-    Submission sub;
-    sub.submission_id = submission_id;
-    sub.verdict = Verdict::JE;
-    SendFinalResult(sub);
-    return true;
-  }
-  return true;
-}
-
-void SendResult(const Submission& sub) {
-  nlohmann::json data;
-  data["submission_id"] = sub.submission_id;
-  auto& tds = data["results"];
-  tds = nlohmann::json::array();
+nlohmann::json TdResultsJSON(const Submission& sub) {
+  nlohmann::json tds = nlohmann::json::array();
   for (size_t i = 0; i < sub.td_results.size(); i++) {
     auto& nowtd = sub.td_results[i];
     if (nowtd.verdict == Verdict::NUL) continue;
@@ -377,11 +490,27 @@ void SendResult(const Submission& sub) {
     }
     tds.push_back(std::move(tddata));
   }
+  return tds;
+}
+
+} // namespace
+
+void TryFetchSubmission() {
+  Request req{};
+  req.is_unique = true;
+  req.key = -1;
+  req.action = "fetch_submission";
+  PushRequest(std::move(req));
+}
+
+void SendResult(const Submission& sub) {
+  nlohmann::json data;
+  data["submission_id"] = sub.submission_id;
+  data["results"] = TdResultsJSON(sub);
   Request req{};
   req.is_unique = true;
   req.key = sub.submission_id;
-  req.is_post = true;
-  req.endpoint = "/fetch/td_result";
+  req.action = "td_result";
   req.body = std::move(data);
   PushRequest(std::move(req));
 }
@@ -390,10 +519,13 @@ void SendFinalResult(const Submission& sub) {
   nlohmann::json data{{"submission_id", sub.submission_id}, {"verdict", VerdictToAbr(sub.verdict)}};
   if (sub.verdict == Verdict::CE || sub.verdict == Verdict::CLE) {
     data["message"] = sub.ce_message;
+  } else {
+    data["td_results"] = TdResultsJSON(sub);
   }
   Request req{};
-  req.is_post = true;
-  req.endpoint = "/fetch/submission_result";
+  req.force_pop = true;
+  req.key = sub.submission_id;
+  req.action = "submission_result";
   req.body = std::move(data);
   PushRequest(std::move(req));
 }
@@ -401,19 +533,43 @@ void SendFinalResult(const Submission& sub) {
 void SendStatus(int submission_id, const std::string& status) {
   nlohmann::json data{{"submission_id", submission_id}, {"verdict", status}};
   Request req{};
-  req.is_post = true;
-  req.endpoint = "/fetch/submission_result";
+  req.force_pop = true;
+  req.key = submission_id;
+  req.action = "submission_result";
+  req.body = std::move(data);
+  PushRequest(std::move(req));
+}
+
+void SendQueuedSubmissions(bool send_if_empty) {
+  std::vector<int> ids = GetQueuedSubmissionID();
+  if (ids.empty() && !send_if_empty) return;
+  nlohmann::json data{{"submission_ids", ids}};
+  Request req{};
+  req.is_unique = true;
+  req.key = -2;
+  req.action = "report_queued";
   req.body = std::move(data);
   PushRequest(std::move(req));
 }
 
 void ServerWorkLoop() {
+  // main thread: send current received submissions
+  // thread 2: RequestLoop (send all outgoing requests via queue)
+  // thread 3...: WsClient (created by RequestLoop)
   std::thread thr(RequestLoop);
   thr.detach();
+  int empty_cnt = 0;
   while (true) {
-    if (kMaxQueue > 0 && CurrentSubmissionQueueSize() < (size_t)kMaxQueue) {
-      if (FetchOneSubmission()) continue;
+    std::this_thread::sleep_for(std::chrono::duration<double>(10));
+    // if empty, send every 30 seconds
+    SendQueuedSubmissions(empty_cnt == 2);
+    size_t queue_size = CurrentSubmissionQueueSize();
+    if (queue_size == 0) {
+      if (++empty_cnt == 3) empty_cnt = 0;
+    } else {
+      empty_cnt = 0;
     }
-    std::this_thread::sleep_for(std::chrono::duration<double>(kFetchInterval));
+    // fetch every 10 seconds anyways
+    if (queue_size < kMaxQueue) TryFetchSubmission();
   }
 }

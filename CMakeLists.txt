@@ -68,6 +68,10 @@ FetchContent_Declare(
   URL "https://github.com/yhirose/cpp-httplib/archive/refs/tags/v0.10.8.zip"
 )
 FetchContent_Declare(
+  websocketpp
+  URL "https://github.com/zaphoyd/websocketpp/archive/refs/tags/0.8.2.zip"
+)
+FetchContent_Declare(
   sqlite_orm
   URL "https://github.com/fnc12/sqlite_orm/archive/refs/tags/v1.7.1.zip"
 )
@@ -81,7 +85,9 @@ if(TIOJ_INSTALL_LIBTIOJ AND TIOJ_INSTALL_DEPENDENCIES)
 else()
   FetchContent_MakeAvailable_Exclude(cjail json)
 endif()
-FetchContent_MakeAvailable_Exclude(spdlog fmt ini httplib sqlite_orm argparse)
+
+find_package(OpenSSL REQUIRED)
+FetchContent_MakeAvailable_Exclude(spdlog fmt ini httplib websocketpp sqlite_orm argparse)
 
 # default scoring
 add_executable(default-scoring "tools/default-scoring.cpp")
@@ -109,7 +115,10 @@ add_subdirectory(src)
 # judge
 file(GLOB JUDGE_SRC "src/*.cpp" "src/*.h")
 add_executable(tioj-judge ${JUDGE_SRC})
-target_link_libraries(tioj-judge libtioj spdlog::spdlog fmt::fmt tortellini httplib::httplib sqlite_orm::sqlite_orm argparse::argparse)
+target_link_libraries(
+    tioj-judge libtioj spdlog::spdlog fmt::fmt tortellini
+    httplib::httplib websocketpp ${OPENSSL_LIBRARIES}
+    sqlite_orm::sqlite_orm argparse::argparse)
 install(TARGETS tioj-judge DESTINATION bin)
 
 # testing

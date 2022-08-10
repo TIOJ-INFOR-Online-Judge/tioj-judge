@@ -436,6 +436,7 @@ void FinalizeSubmission(Submission& sub, const TaskEntry& task) {
     if (sub.reporter) sub.reporter->ReportOverallResult(sub);
   }
   spdlog::info("Submission finished: id={} sub_id={} list_size={}", id, sub.submission_id, submission_list.size());
+  if (sub.reporter) sub.reporter->ReportFinalized(sub, submission_list.size());
   submission_id_map.erase(id);
   submission_list.erase(id);
 }
@@ -515,6 +516,18 @@ void WorkLoop(bool loop) {
 size_t CurrentSubmissionQueueSize() {
   std::lock_guard lck(task_mtx);
   return submission_list.size();
+}
+
+std::vector<int> GetQueuedSubmissionID() {
+  std::vector<int> st;
+  {
+    std::lock_guard lck(task_mtx);
+    for (auto& i : submission_list) {
+      if (cancelled_list.count(i.first)) continue;
+      st.push_back(i.second.submission_id);
+    }
+  }
+  return st;
 }
 
 bool PushSubmission(Submission&& sub, size_t max_queue) {

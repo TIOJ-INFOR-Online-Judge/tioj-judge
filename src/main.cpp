@@ -25,7 +25,6 @@ bool ParseConfig(const fs::path& conf_path) {
   if (submission_root.size()) kSubmissionRoot = submission_root;
   if (data_dir.size()) kDataDir = data_dir;
   kMaxParallel = ini[""]["parallel"] | kMaxParallel;
-  kFetchInterval = ini[""]["fetch_interval"] | kFetchInterval;
   kMaxRSS = (ini[""]["max_rss_per_task_mb"] | (kMaxRSS / 1024)) * 1024;
   kMaxOutput = (ini[""]["max_output_per_task_mb"] | (kMaxRSS / 1024)) * 1024;
   kMaxQueue = ini[""]["max_submission_queue_size"] | kMaxQueue;
@@ -47,9 +46,6 @@ void ParseArgs(int argc, char** argv) {
   parser.add_argument("-p", "--parallel")
     .scan<'d', int>()
     .help("Number of maximum parallel judge tasks");
-  parser.add_argument("-i", "--interval")
-    .scan<'g', double>()
-    .help("Submission fetching interval (in seconds)");
 
   try {
     parser.parse_args(argc, argv);
@@ -71,9 +67,6 @@ void ParseArgs(int argc, char** argv) {
   }
   if (auto val = parser.present<int>("--parallel")) {
     kMaxParallel = val.value();
-  }
-  if (auto val = parser.present<double>("--interval")) {
-    kFetchInterval = val.value();
   }
 }
 

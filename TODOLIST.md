@@ -7,7 +7,9 @@
 [x] Option to ignore some testdata in overall verdict
 [x] Provide Dockerfile
 [x] Move DB operations from `server_io.cpp` to a separate file
-[ ] Fix job counting bug
+[x] Fix job counting bug
+[x] ActionCable for server IO
+[ ] Check Dockerfile
 [ ] Multistage problems
 
 ## Future

@@ -17,6 +17,7 @@ class AssertACReporter : public Reporter {
     ASSERT_EQ(sub.td_results[subtask].verdict, Verdict::AC);
   }
   void ReportCEMessage(const Submission&) {}
+  void ReportFinalized(const Submission&, size_t) {}
 } reporter;
 
 long SetupSubmission(Submission& sub, int id, Compiler lang, long time, const std::string& code,

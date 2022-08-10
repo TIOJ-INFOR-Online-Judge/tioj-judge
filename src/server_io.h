@@ -6,25 +6,24 @@
 
 extern std::string kTIOJUrl;
 extern std::string kTIOJKey;
-extern double kFetchInterval;
-extern int kMaxQueue;
+extern size_t kMaxQueue;
 
 // Note that we also need to add some work balancing on webserver in case of multiple clients,
 //   because now they will try to greedily fetch submissions to judge them in parallel
 //   (instead of miku's behavior of fetching after finishing the running submission),
 //   and this may result in inbalanced fetching.
-// We can implement it by putting in use the currently-unused judge_servers table
 
-// This function is blocking
-bool FetchOneSubmission();
+// Send submission query to websocket
+void TryFetchSubmission();
 
 // These functions will push the request into queue and return immediately
 void SendResult(const Submission&);
 void SendFinalResult(const Submission&);
 void SendStatus(int submission_id, const std::string&); // "Validating" or "queued"
+void SendQueuedSubmissions(bool send_if_empty);
 
-// This function will call FetchOneSubmission() periodically, and also deal with
-//   the requests sent from the above functions
+// This function will initialize websocket connection and deal with all server interactions.
+// It will not return.
 void ServerWorkLoop();
 
 #endif  // SERVER_IO_H_
