@@ -16,6 +16,8 @@
 
 ### Installation
 
+Boost is required to compile the judge server.
+
 ```
 mkdir build
 cmake ..

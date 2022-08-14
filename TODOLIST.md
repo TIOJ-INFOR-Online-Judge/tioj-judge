@@ -9,7 +9,6 @@
 [x] Move DB operations from `server_io.cpp` to a separate file
 [x] Fix job counting bug
 [x] ActionCable for server IO
-[ ] Check Dockerfile
 [ ] Multistage problems
 
 ## Future

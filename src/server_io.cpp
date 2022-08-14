@@ -143,13 +143,11 @@ void OneSubmissionThread(nlohmann::json&& data) {
     SendStatus(submission_id, "queued");
     return;
   }
-  TryFetchSubmission();
+  if (CurrentSubmissionQueueSize() + 1 < kMaxQueue) TryFetchSubmission();
   if (!DealOneSubmission(std::move(data))) {
     // send JE
-    Submission sub;
-    sub.submission_id = submission_id;
-    sub.verdict = Verdict::JE;
-    SendFinalResult(sub);
+    SendStatus(submission_id, VerdictToAbr(Verdict::JE));
+    TryFetchSubmission();
   }
 }
 

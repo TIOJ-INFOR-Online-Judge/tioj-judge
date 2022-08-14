@@ -141,7 +141,7 @@ struct cjail_result RunExecute(const Submission& sub, const Task& task, int uid)
   if (opt.rss == 0 || opt.rss > kMaxRSS) opt.rss = kMaxRSS;
   opt.vss = lim.vss ? lim.vss + 2048 : 0; // add some margin so we can determine whether it is MLE
   opt.proc_num = 1;
-  // file limit is not needed since we have already limit the total size by mounting tmpfs
+  // file limit is not needed since we have already limited the total size by mounting tmpfs
   opt.fsize = std::min(lim.output, kMaxOutput);
   if (sub.sandbox_strict) {
     if (sub.lang == Compiler::PYTHON2 || sub.lang == Compiler::PYTHON3) {
