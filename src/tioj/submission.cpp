@@ -232,6 +232,7 @@ bool SetupExecute(const Submission& sub, const TaskEntry& task) {
   auto workdir = Workdir(ExecuteBoxPath(id, subtask));
   CreateDirs(workdir);
   if (!sub.sandbox_strict) { // for non-strict: mount a tmpfs to limit overall filesize
+    // TODO FEATURE(io-interactive): create FIFOs outside of workdir by hardlink
     long tmpfs_size_kib =
       (fs::file_size(CompileBoxOutput(id, CompileSubtask::USERPROG, sub.lang)) / 4096 + 1) * 4 +
       (fs::file_size(TdInput(sub.problem_id, subtask)) / 4096 + 1) * 4 +
@@ -321,6 +322,7 @@ bool SetupScoring(const Submission& sub, const TaskEntry& task) {
     if (sub.reporter) sub.reporter->ReportScoringResult(sub, subtask);
     return false;
   }
+  // TODO FEATURE(scoring-style): if SKIP, move file, call FinalizeScoring and return false
   CreateDirs(Workdir(ScoringBoxPath(id, subtask)), fs::perms::all);
   Move(ExecuteBoxFinalOutput(id, subtask),
        ScoringBoxUserOutput(id, subtask), kPerm666);
@@ -442,6 +444,7 @@ void FinalizeSubmission(Submission& sub, const TaskEntry& task) {
   submission_list.erase(id);
 }
 
+// Call corresponding Finalize if not skipped & pop task from queue
 void FinalizeTask(long id, const struct cjail_result& res, bool skipped = false) {
   auto& entry = task_list[id];
   spdlog::info("Finalizing task: id={} taskid={} tasktype={} subtask={} skipped={}",

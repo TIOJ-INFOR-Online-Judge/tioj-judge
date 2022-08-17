@@ -17,7 +17,6 @@ fs::path CompileBoxPath(long id, CompileSubtask subtask);
 fs::path CompileBoxInput(long id, CompileSubtask subtask, Compiler lang, bool inside_box = false);
 fs::path CompileBoxInterlib(long id, int problem_id, bool inside_box = false);
 fs::path CompileBoxInterlibImpl(long id, Compiler lang, bool inside_box = false);
-// TODO FEATURE(link): CompileBoxInterlibImpl
 fs::path CompileBoxOutput(long id, CompileSubtask subtask, Compiler lang, bool inside_box = false);
 fs::path CompileBoxMessage(long id, CompileSubtask subtask, bool inside_box = false);
 fs::path ExecuteBoxPath(long id, int td);

@@ -12,13 +12,15 @@
 - [x] Use pipe output in strict mode
 - [ ] Multistage problems & update README
 - [x] Linear time calibration
+- [ ] Different comparison methods (TODO FEATURE(scoring-style))
 
 ## Future
 
-- [ ] Add option to stop on first non-AC testdata of each task
+- [ ] Add option to stop on first non-AC testdata of each task (TODO FEATURE(group))
 - [ ] Pin judge (platform-independent judge result)
-- [ ] I/O Interactive & output-only
+- [ ] I/O Interactive & output-only (TODO FEATURE(io-interactive))
     - I/O interactive should also support multistage (similar to that of CMS Communication)
+        - Modify cjail to allow specify cgroup name for CPU time accounting; treat all processes as one task
     - Output-only needs a lot of modifications on web server and API
 - [ ] Periodically clear testdata for recently unused problems
 - [ ] Add more languages

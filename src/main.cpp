@@ -1,3 +1,4 @@
+#include <fcntl.h>
 #include <unistd.h>
 #include <thread>
 #include <fstream>
@@ -13,6 +14,8 @@
 
 namespace {
 
+bool to_lock = true;
+
 bool ParseConfig(const fs::path& conf_path) {
   std::ifstream fin(conf_path);
   if (!fin) return false;
@@ -20,10 +23,10 @@ bool ParseConfig(const fs::path& conf_path) {
   fin >> ini;
   std::string box_root = ini[""]["box_root"] | "";
   std::string submission_root = ini[""]["submission_root"] | "";
-  std::string data_dir = ini[""]["data_dir"] | "";
+  // std::string data_dir = ini[""]["data_dir"] | "";
   if (box_root.size()) kBoxRoot = box_root;
   if (submission_root.size()) kSubmissionRoot = submission_root;
-  if (data_dir.size()) kDataDir = data_dir;
+  // if (data_dir.size()) kDataDir = data_dir;
   kMaxParallel = ini[""]["parallel"] | kMaxParallel;
   kMaxRSS = (ini[""]["max_rss_per_task_mb"] | (kMaxRSS / 1024)) * 1024;
   kMaxOutput = (ini[""]["max_output_per_task_mb"] | (kMaxRSS / 1024)) * 1024;
@@ -50,6 +53,10 @@ void ParseArgs(int argc, char** argv) {
   parser.add_argument("-m", "--time-multiplier")
     .scan<'g', double>()
     .help("Ratio of real time to indicated time");
+  parser.add_argument("--no-lock")
+    .default_value(false)
+    .implicit_value(true)
+    .help("Not check for other running instances");
 
   try {
     parser.parse_args(argc, argv);
@@ -75,6 +82,19 @@ void ParseArgs(int argc, char** argv) {
   if (auto val = parser.present<double>("--time-multiplier")) {
     kTimeMultiplier = val.value();
   }
+  to_lock = parser["--no-lock"] == false;
+}
+
+bool LockFile() {
+  fs::path lock_file = kDataDir / "lock";
+  int fd = open(lock_file.c_str(), O_RDWR | O_CREAT, 0644);
+  if (fd < 0) return false;
+  struct flock lock{};
+  lock.l_type = F_WRLCK;
+  lock.l_whence = SEEK_SET;
+  lock.l_start = lock.l_len = 0;
+  if (fcntl(fd, F_SETLK, &lock) < 0) return false;
+  return true;
 }
 
 } // namespace
@@ -84,9 +104,13 @@ int main(int argc, char** argv) {
   InitLogger();
   if (geteuid() != 0) {
     spdlog::error("Must be run as root.");
-    return 0;
+    return 1;
   }
   ParseArgs(argc, argv);
+  if (to_lock && !LockFile()) {
+    spdlog::error("Another judge instance is running.");
+    return 1;
+  }
   std::thread server_thread(ServerWorkLoop);
   server_thread.detach();
   WorkLoop();

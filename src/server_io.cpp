@@ -342,6 +342,7 @@ bool DealOneSubmission(nlohmann::json&& data) {
     // problem information
     auto& problem = data["problem"];
     sub.problem_id = problem["id"].get<int>();
+    sub.sandbox_strict = problem["strict_mode"].get<bool>();
     sub.specjudge_type = (SpecjudgeType)problem["specjudge_type"].get<int>();
     if (sub.specjudge_type != SpecjudgeType::NORMAL) {
       sub.specjudge_lang = GetCompiler(problem["specjudge_compiler"].get<std::string>());

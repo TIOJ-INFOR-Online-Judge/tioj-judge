@@ -3,8 +3,35 @@
 #include <filesystem>
 #include <nlohmann/json.hpp>
 
+bool LineCompare(std::ifstream& f_ans, std::ifstream& f_usr,
+                 bool strip_tail = true, bool ignore_tail_empty_lines = true) {
+  while (f_ans.eof() == f_usr.eof()) {
+    if (f_ans.eof()) return true;
+    std::string s, t;
+    getline(f_ans, s);
+    getline(f_usr, t);
+    if (strip_tail) {
+      // std::string::npos + 1 == 0
+      s.erase(s.find_last_not_of(" \n\r\t") + 1);
+      t.erase(t.find_last_not_of(" \n\r\t") + 1);
+    }
+    if (s != t) return false;
+  }
+  if (!ignore_tail_empty_lines) return false;
+  while (!f_ans.eof() || !f_usr.eof()) {
+    std::string s;
+    if (!f_ans.eof()) {
+      getline(f_ans, s);
+    } else {
+      getline(f_usr, s);
+    }
+    if (s.find_last_not_of(" \n\r\t") != std::string::npos) return false;
+  }
+  return true;
+}
+
 int main(int argc, char** argv) {
-  // TODO FEATURE(scoring-style): Add different scoring style such as strict compare & numerical compare
+  // TODO FEATURE(scoring-style): Add different scoring style such as strict compare, white-diff (CMS) & numerical compare
   nlohmann::json json;
   {
     std::ifstream fin(argv[1]);
@@ -15,36 +42,11 @@ int main(int argc, char** argv) {
     std::cout << nlohmann::json{{"verdict", "WA"}};
     return 0;
   }
-  std::ifstream tsol(json["answer_file"].get<std::string>()), mout(user_output);
-  while (true) {
-    if (tsol.eof() != mout.eof()) {
-      while (tsol.eof() != mout.eof()) {
-        std::string s;
-        if (tsol.eof()) {
-          getline(mout, s);
-        } else {
-          getline(tsol, s);
-        }
-        s.erase(s.find_last_not_of(" \n\r\t") + 1);
-        if (s != "") {
-          std::cout << nlohmann::json{{"verdict", "WA"}};
-          return 0;
-        }
-      }
-      break;
-    }
-    if (tsol.eof() && mout.eof()) {
-      break;
-    }
-    std::string s, t;
-    getline(tsol, s);
-    getline(mout, t);
-    s.erase(s.find_last_not_of(" \n\r\t") + 1);
-    t.erase(t.find_last_not_of(" \n\r\t") + 1);
-    if (s != t) {
-      std::cout << nlohmann::json{{"verdict", "WA"}};
-      return 0;
-    }
+  std::ifstream f_ans(json["answer_file"].get<std::string>()), f_usr(user_output);
+  bool res = LineCompare(f_ans, f_usr);
+  if (res) {
+    std::cout << nlohmann::json{{"verdict", "AC"}};
+  } else {
+    std::cout << nlohmann::json{{"verdict", "WA"}};
   }
-  std::cout << nlohmann::json{{"verdict", "AC"}};
 }

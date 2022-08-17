@@ -124,6 +124,7 @@ struct cjail_result RunCompile(const Submission& sub, const Task& task, int uid)
   // we don't need to close the opened files because the process is about to terminate
 }
 
+// TODO FEATURE(io-interactive): fork & run multiple cjails and merge them into one cjail_result
 struct cjail_result RunExecute(const Submission& sub, const Task& task, int uid) {
   long id = sub.submission_internal_id;
   int subtask = task.subtask;

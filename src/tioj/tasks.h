@@ -9,7 +9,7 @@ struct Task {
   TaskType type;
   int subtask;
   // testdata # for EXECUTE & SCORING; (int)CompileSubtask for COMPILE
-  // TODO FEATURE(multistage,link): subsubtask
+  // TODO FEATURE(multistage): stage
 };
 
 // We're not sure whether cjail is thread-safe. Thus, we use fork() for every RunTask,

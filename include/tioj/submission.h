@@ -19,6 +19,7 @@ extern double kTimeMultiplier;
   X(NORMAL) \
   X(SPECJUDGE_OLD) \
   X(SPECJUDGE_NEW)
+// TODO FEATURE(scoring-style): SKIP (use output directly as JSON result)
 enum class SpecjudgeType {
 #define X(name) name,
   ENUM_SPECJUDGE_TYPE_
@@ -93,7 +94,7 @@ class Submission {
   InterlibType interlib_type;
   Compiler specjudge_lang;
   bool sandbox_strict; // false for backward-compatability
-  bool remove_submission; // remove submission code after judge
+  // TODO FEATURE(multistage): stages
   // task information
   struct TestdataLimit {
     int64_t vss, rss, output; // KiB
@@ -117,8 +118,9 @@ class Submission {
   // overall result
   Verdict verdict;
   std::string ce_message;
-  // result reporting
-  Reporter* reporter;
+  // judge behavior
+  Reporter* reporter; // callbacks for result reporting
+  bool remove_submission; // remove submission code after judge
 
   Submission() :
       submission_id(0), contest_id(0), submission_time(0), submitter_id(0),
@@ -128,9 +130,9 @@ class Submission {
       interlib_type(InterlibType::NONE),
       specjudge_lang(Compiler::GCC_CPP_17),
       sandbox_strict(false),
-      remove_submission(true),
       verdict(Verdict::NUL),
-      reporter(nullptr) {}
+      reporter(nullptr),
+      remove_submission(true) {}
 
   nlohmann::json TestdataMeta(int subtask) const;
 };
