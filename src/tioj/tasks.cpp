@@ -151,8 +151,17 @@ struct cjail_result RunExecute(const Submission& sub, const Task& task, int uid)
       // TODO: is it possible to run without /usr/bin and /bin? (maybe copy python executable to workdir)
       opt.dirs = {"/usr", "/lib", "/lib64", "/etc/alternatives", "/bin"};
     }
-    opt.fd_input = open(ExecuteBoxInput(id, subtask, sub.sandbox_strict).c_str(), O_RDONLY);
-    opt.fd_output = open(ExecuteBoxOutput(id, subtask, sub.sandbox_strict).c_str(), O_WRONLY | O_CREAT, 0600);
+    int fd_input = open(ExecuteBoxInput(id, subtask, sub.sandbox_strict).c_str(), O_RDONLY);
+    int fd_output = open(ExecuteBoxOutput(id, subtask, sub.sandbox_strict).c_str(), O_WRONLY | O_CREAT, 0600);
+    int pipes[2][2];
+    if (pipe(pipes[0]) < 0 || !SpliceProcess(fd_input, pipes[0][1]) || close(pipes[0][1]) < 0 ||
+        pipe(pipes[1]) < 0 || !SpliceProcess(pipes[1][0], fd_output) || close(pipes[1][0]) < 0) {
+      // after returned, this process will terminate, closing the pipes and cause SpliceProcess' (if any) to exit
+      goto err;
+    }
+    close(fd_input), close(fd_output);
+    opt.fd_input = pipes[0][0];
+    opt.fd_output = pipes[1][1];
     opt.error = "/dev/null";
   } else {
     opt.dirs = {"/usr", "/lib", "/lib64", "/etc/alternatives", "/bin"};
@@ -161,8 +170,14 @@ struct cjail_result RunExecute(const Submission& sub, const Task& task, int uid)
     opt.error = ExecuteBoxError(-1, -1, true);
   }
   opt.FilterDirs();
-  return SandboxExec(opt);
   // we don't need to close the opened files because the process is about to terminate
+  return SandboxExec(opt);
+ err:
+  spdlog::warn("SandboxExec error: errno={} {}", errno, strerror(errno));
+  struct cjail_result ret;
+  ret.oomkill = errno;
+  ret.timekill = -1;
+  return ret;
 }
 
 struct cjail_result RunScoring(const Submission& sub, const Task& task, int uid) {

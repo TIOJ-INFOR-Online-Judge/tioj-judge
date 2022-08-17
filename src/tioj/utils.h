@@ -16,6 +16,8 @@ constexpr fs::perms kPerm666 =
 
 fs::path InsideBox(const fs::path& box, const fs::path& path);
 
+bool SpliceProcess(int read_fd, int write_fd);
+
 bool MountTmpfs(const fs::path&, long size_kib);
 bool Umount(const fs::path&);
 bool CreateDirs(const fs::path&, fs::perms = fs::perms::unknown);

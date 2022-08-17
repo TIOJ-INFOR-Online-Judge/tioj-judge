@@ -9,7 +9,9 @@
 - Judge multiple submissions in parallel
 - Isolated and size-limited tmpfs to prevent DoS attacks
 - New powerful special judge mode that can access lots of information, set arbitrary score and override results
-- Optional strict mode for C/C++/Haskell that compiles static executables and run them without any libraries present
+- Optional strict mode for more isolation:
+    - Compiles static executables and run them without any shared libraries present (only for C/C++/Haskell)
+    - Use pipes for standard input / output to avoid seeking or re-opening
 - A library interface `libtioj` that can be used independently
 - A time multiplier to compensate speed difference of multiple judge clients
 

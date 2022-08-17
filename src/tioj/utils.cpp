@@ -1,5 +1,7 @@
 #include "utils.h"
 
+#include <fcntl.h>
+#include <sys/wait.h>
 #include <sys/mount.h>
 #include <atomic>
 
@@ -8,6 +10,36 @@
 namespace {
 
 std::atomic_long submission_internal_id_seq = 0;
+
+#if __has_include(<linux/close_range.h>)
+#include <linux/close_range.h>
+int CloseFrom(int minfd) {
+  return close_range(minfd, ~0U, 0);
+}
+#else
+#include <dirent.h>
+int CloseFrom(int minfd) {
+  DIR *fddir = opendir("/proc/self/fd");
+  if (!fddir) goto error;
+  {
+    int dfd = dirfd(fddir);
+    for (struct dirent *dent; (dent = readdir(fddir));) {
+      if (!strcmp(dent->d_name, ".") || !strcmp(dent->d_name, "..")) continue;
+      int fd = strtol(dent->d_name, NULL, 10);
+      if (fd >= minfd && fd != dfd) {
+        if (close(fd) && errno != EBADF) goto error_dir;
+      }
+    }
+  }
+  closedir(fddir);
+  return 0;
+
+error_dir:
+  closedir(fddir);
+error:
+  return -1;
+}
+#endif // has_include(<linux/close_range.h>)
 
 } // namespace
 
@@ -91,6 +123,26 @@ ENUM_SWITCH_FUNCTION(const char* InterlibTypeName, InterlibType, ENUM_INTERLIB_T
 
 fs::path InsideBox(const fs::path& box, const fs::path& path) {
   return "/" / path.lexically_relative(box);
+}
+
+bool SpliceProcess(int read_fd, int write_fd) {
+  pid_t pid = fork();
+  if (pid < 0) return false;
+  if (pid == 0) {
+    pid_t pid2 = fork();
+    if (pid2 < 0) _exit(1);
+    if (pid2 == 0) {
+      dup2(read_fd, 0);
+      dup2(write_fd, 1);
+      CloseFrom(2);
+      while (splice(0, nullptr, 1, nullptr, 65536, 0) > 0);
+    }
+    _exit(0);
+  }
+  int status;
+  if (waitpid(pid, &status, 0) < 0) return false;
+  if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) return false;
+  return true;
 }
 
 bool MountTmpfs(const fs::path& path, long size_kib) {

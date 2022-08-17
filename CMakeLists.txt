@@ -44,7 +44,7 @@ include(FetchContentExclude)
 FetchContent_Declare(
   cjail
   GIT_REPOSITORY "https://github.com/adrien1018/cjail.git"
-  GIT_TAG "d921e047a7b13bc796424bbbae529951f8db75d8"
+  GIT_TAG "66319a18ab0c23af11e69e042a2e9bd978789962"
 )
 FetchContent_Declare(
   spdlog
