@@ -12,6 +12,8 @@ extern int kMaxParallel;
 // KiB
 extern long kMaxRSS;
 extern long kMaxOutput;
+// Real time * kTimeMultiplier = Indicated time
+extern double kTimeMultiplier;
 
 #define ENUM_SPECJUDGE_TYPE_ \
   X(NORMAL) \

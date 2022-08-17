@@ -19,11 +19,12 @@
 int kMaxParallel = 1;
 long kMaxRSS = 2 * 1024 * 1024; // 2G
 long kMaxOutput = 1 * 1024 * 1024; // 1G
+double kTimeMultiplier = 1.0;
 
 namespace {
 
 inline long ToUs(const struct timeval& v) {
-  return (long)v.tv_sec * 1'000'000 + v.tv_usec;
+  return ((long)v.tv_sec * 1'000'000 + v.tv_usec) * (long double)kTimeMultiplier;
 }
 
 } // namespace

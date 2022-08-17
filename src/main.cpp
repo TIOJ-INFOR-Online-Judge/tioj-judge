@@ -28,6 +28,7 @@ bool ParseConfig(const fs::path& conf_path) {
   kMaxRSS = (ini[""]["max_rss_per_task_mb"] | (kMaxRSS / 1024)) * 1024;
   kMaxOutput = (ini[""]["max_output_per_task_mb"] | (kMaxRSS / 1024)) * 1024;
   kMaxQueue = ini[""]["max_submission_queue_size"] | kMaxQueue;
+  kTimeMultiplier = ini[""]["time_multiplier"] | kTimeMultiplier;
   kTIOJUrl = ini[""]["tioj_url"] | kTIOJUrl;
   kTIOJKey = ini[""]["tioj_key"] | kTIOJKey;
   return true;
@@ -46,6 +47,9 @@ void ParseArgs(int argc, char** argv) {
   parser.add_argument("-p", "--parallel")
     .scan<'d', int>()
     .help("Number of maximum parallel judge tasks");
+  parser.add_argument("-m", "--time-multiplier")
+    .scan<'g', double>()
+    .help("Ratio of real time to indicated time");
 
   try {
     parser.parse_args(argc, argv);
@@ -67,6 +71,9 @@ void ParseArgs(int argc, char** argv) {
   }
   if (auto val = parser.present<int>("--parallel")) {
     kMaxParallel = val.value();
+  }
+  if (auto val = parser.present<double>("--time-multiplier")) {
+    kTimeMultiplier = val.value();
   }
 }
 

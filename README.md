@@ -7,10 +7,11 @@
 - Limit memory by VSS and/or RSS
 - Detailed execution stats compared to [miku](https://github.com/TIOJ-INFOR-Online-Judge/miku), including verdicts such as SIG, OLE, MLE and VSS reporting
 - Judge multiple submissions in parallel
-- Isolated and size-limited tmpfs to prevent DOS attacks
+- Isolated and size-limited tmpfs to prevent DoS attacks
 - New powerful special judge mode that can access lots of information, set arbitrary score and override results
 - Optional strict mode for C/C++/Haskell that compiles static executables and run them without any libraries present
 - A library interface `libtioj` that can be used independently
+- A time multiplier to compensate speed difference of multiple judge clients
 
 ## Judge Server
 
@@ -29,25 +30,26 @@ This will also install `libtioj` and its dependencies (namely `nlohmann_json` an
 
 ### Usage
 
-Set up the `/etc/tioj-judge.conf` configuration file:
+Set up the `/etc/tioj-judge.conf` configuration file, and then run `sudo tioj-judge` to start the judge. The configuration file format is as follows:
 
 ```
 tioj_url = https://url.to.tioj.web.server
 tioj_key = some_random_key
-parallel = 2
-fetch_interval = 1
+parallel = 1
 max_rss_per_task_mb = 2048
 max_output_per_task_mb = 1024
-max_submission_queue_size = 500
+max_submission_queue_size = 20
+time_multiplier = 1.0
 ```
 
-Run `sudo tioj-judge` to start the judge.
+- The indicated values except `tioj_url` and `tioj_key` are the default values.
+- `time_multiplier` is the ratio of the indicated time to the real time. Thus, the multiplier should be larger if the computer is faster, and smaller if the computer is slower.
 
 ### Docker Usage
 
 A Dockerfile is provided to run the judge easily.
 
-When running the docker, `--privileged --net=host --pid=host` must be given, and a file containing the fetch key should be mount into `/run/secrets/judge-key`.
+When running the docker, `--privileged --net=host --pid=host` must be given, and the fetch key should be given via environment variable `TIOJ_KEY`.
 
 ## Library
 

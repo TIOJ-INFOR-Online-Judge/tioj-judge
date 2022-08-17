@@ -114,6 +114,7 @@ struct cjail_result RunCompile(const Submission& sub, const Task& task, int uid)
   opt.fd_error = opt.fd_output;
   opt.uid = opt.gid = uid;
   opt.wall_time = 60L * 1'000'000;
+  opt.wall_time /= kTimeMultiplier;
   opt.rss = kMaxRSS;
   opt.proc_num = 10;
   opt.fsize = kMaxOutput;
@@ -137,6 +138,8 @@ struct cjail_result RunExecute(const Submission& sub, const Task& task, int uid)
   opt.uid = opt.gid = uid;
   opt.wall_time = std::max(long(lim.time * 1.2), lim.time + 1'000'000);
   opt.cpu_time = lim.time + 50'000; // a little bit of margin just in case
+  opt.wall_time /= kTimeMultiplier;
+  opt.cpu_time /= kTimeMultiplier;
   opt.rss = lim.rss;
   if (opt.rss == 0 || opt.rss > kMaxRSS) opt.rss = kMaxRSS;
   opt.vss = lim.vss ? lim.vss + 2048 : 0; // add some margin so we can determine whether it is MLE
@@ -187,6 +190,7 @@ struct cjail_result RunScoring(const Submission& sub, const Task& task, int uid)
   opt.error = "/dev/null";
   opt.uid = opt.gid = uid;
   opt.wall_time = 60L * 1'000'000;
+  opt.wall_time /= kTimeMultiplier;
   opt.rss = kMaxRSS;
   opt.proc_num = 10;
   opt.fsize = kMaxOutput;
