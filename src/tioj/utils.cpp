@@ -125,7 +125,7 @@ fs::path InsideBox(const fs::path& box, const fs::path& path) {
   return "/" / path.lexically_relative(box);
 }
 
-bool SpliceProcess(int read_fd, int write_fd) {
+bool SpliceProcess(int read_fd, int write_fd, size_t max_size) {
   pid_t pid = fork();
   if (pid < 0) return false;
   if (pid == 0) {
@@ -135,7 +135,11 @@ bool SpliceProcess(int read_fd, int write_fd) {
       dup2(read_fd, 0);
       dup2(write_fd, 1);
       CloseFrom(2);
-      while (splice(0, nullptr, 1, nullptr, 65536, 0) > 0);
+      while (max_size) {
+        auto ret = splice(0, nullptr, 1, nullptr, std::min(max_size, (size_t)65536), 0);
+        if (ret <= 0) break;
+        max_size -= ret;
+      }
     }
     _exit(0);
   }

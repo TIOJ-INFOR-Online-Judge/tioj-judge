@@ -128,35 +128,39 @@ struct cjail_result RunCompile(const Submission& sub, const Task& task, int uid)
 struct cjail_result RunExecute(const Submission& sub, const Task& task, int uid) {
   long id = sub.submission_internal_id;
   int subtask = task.subtask;
-  spdlog::debug("Generating execute settings: id={} subid={}, subtask={}", id, sub.submission_id, task.subtask);
+  int stage = task.stage;
+  spdlog::debug("Generating execute settings: id={} subid={}, subtask={} stage={}",
+      id, sub.submission_id, subtask, stage);
   auto& lim = sub.td_limits[subtask];
-  std::string program = ExecuteBoxProgram(-1, -1, sub.lang, true);
+  std::string program = ExecuteBoxProgram(-1, -1, -1, sub.lang, true);
 
   SandboxOptions opt;
-  opt.boxdir = ExecuteBoxPath(id, subtask);
+  opt.boxdir = ExecuteBoxPath(id, subtask, stage);
   opt.command = ExecuteCommand(sub.lang, program);
+  if (sub.stages > 1) opt.command.push_back(std::to_string(stage));
   opt.workdir = Workdir("/");
   opt.uid = opt.gid = uid;
   opt.wall_time = std::max(long(lim.time * 1.2), lim.time + 1'000'000);
   opt.cpu_time = lim.time + 50'000; // a little bit of margin just in case
   opt.wall_time /= kTimeMultiplier;
   opt.cpu_time /= kTimeMultiplier;
-  opt.rss = lim.rss;
+  opt.rss = lim.rss + 1024;
   if (opt.rss == 0 || opt.rss > kMaxRSS) opt.rss = kMaxRSS;
   opt.vss = lim.vss ? lim.vss + 2048 : 0; // add some margin so we can determine whether it is MLE
   opt.proc_num = 1;
   // file limit is not needed since we have already limited the total size by mounting tmpfs
-  opt.fsize = std::min(lim.output, kMaxOutput);
+  opt.fsize = lim.output;
+  if (opt.fsize == 0 || opt.fsize > kMaxOutput) opt.fsize = kMaxOutput;
   if (sub.sandbox_strict) {
     if (sub.lang == Compiler::PYTHON2 || sub.lang == Compiler::PYTHON3) {
       // TODO: is it possible to run without /usr/bin and /bin? (maybe copy python executable to workdir)
       opt.dirs = {"/usr", "/lib", "/lib64", "/etc/alternatives", "/bin"};
     }
-    int fd_input = open(ExecuteBoxInput(id, subtask, sub.sandbox_strict).c_str(), O_RDONLY);
-    int fd_output = open(ExecuteBoxOutput(id, subtask, sub.sandbox_strict).c_str(), O_WRONLY | O_CREAT, 0600);
+    int fd_input = open(ExecuteBoxInput(id, subtask, stage, sub.sandbox_strict).c_str(), O_RDONLY);
+    int fd_output = open(ExecuteBoxOutput(id, subtask, stage, sub.sandbox_strict).c_str(), O_WRONLY | O_CREAT, 0600);
     int pipes[2][2];
     if (pipe(pipes[0]) < 0 || !SpliceProcess(fd_input, pipes[0][1]) || close(pipes[0][1]) < 0 ||
-        pipe(pipes[1]) < 0 || !SpliceProcess(pipes[1][0], fd_output) || close(pipes[1][0]) < 0) {
+        pipe(pipes[1]) < 0 || !SpliceProcess(pipes[1][0], fd_output, opt.fsize * 1024) || close(pipes[1][0]) < 0) {
       // after returned, this process will terminate, closing the pipes and cause SpliceProcess' (if any) to exit
       goto err;
     }
@@ -166,9 +170,12 @@ struct cjail_result RunExecute(const Submission& sub, const Task& task, int uid)
     opt.error = "/dev/null";
   } else {
     opt.dirs = {"/usr", "/lib", "/lib64", "/etc/alternatives", "/bin"};
-    opt.input = ExecuteBoxInput(-1, -1, sub.sandbox_strict, true);
-    opt.output = ExecuteBoxOutput(-1, -1, sub.sandbox_strict, true);
-    opt.error = ExecuteBoxError(-1, -1, true);
+    opt.input = ExecuteBoxInput(-1, -1, -1, sub.sandbox_strict, true);
+    opt.output = ExecuteBoxOutput(-1, -1, -1, sub.sandbox_strict, true);
+    opt.error = ExecuteBoxError(-1, -1, -1, true);
+    // Output file is accounted in cgroups, so we need to extend RSS limit
+    // MLE check will still be done by the original limit
+    opt.rss += opt.fsize;
   }
   opt.FilterDirs();
   // we don't need to close the opened files because the process is about to terminate

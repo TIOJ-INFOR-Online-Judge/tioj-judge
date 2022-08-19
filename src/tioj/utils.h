@@ -16,7 +16,7 @@ constexpr fs::perms kPerm666 =
 
 fs::path InsideBox(const fs::path& box, const fs::path& path);
 
-bool SpliceProcess(int read_fd, int write_fd);
+bool SpliceProcess(int read_fd, int write_fd, size_t max_size = std::numeric_limits<size_t>::max());
 
 bool MountTmpfs(const fs::path&, long size_kib);
 bool Umount(const fs::path&);

@@ -19,15 +19,14 @@ fs::path CompileBoxInterlib(long id, int problem_id, bool inside_box = false);
 fs::path CompileBoxInterlibImpl(long id, Compiler lang, bool inside_box = false);
 fs::path CompileBoxOutput(long id, CompileSubtask subtask, Compiler lang, bool inside_box = false);
 fs::path CompileBoxMessage(long id, CompileSubtask subtask, bool inside_box = false);
-fs::path ExecuteBoxPath(long id, int td);
-fs::path ExecuteBoxProgram(long id, int td, Compiler lang, bool inside_box = false);
+fs::path ExecuteBoxPath(long id, int td, int stage);
+fs::path ExecuteBoxProgram(long id, int td, int stage, Compiler lang, bool inside_box = false);
 fs::perms ExecuteBoxProgramPerm(Compiler lang, bool strict);
-fs::path ExecuteBoxTdStrictPath(long id, int td, bool inside_box = false);
-// TODO FEATURE(multistage): add stage; use previous output as input
-fs::path ExecuteBoxInput(long id, int td, bool strict, bool inside_box = false);
-fs::path ExecuteBoxOutput(long id, int td, bool strict, bool inside_box = false);
-fs::path ExecuteBoxError(long id, int td, bool inside_box = false);
-fs::path ExecuteBoxFinalOutput(long id, int td);
+fs::path ExecuteBoxTdStrictPath(long id, int td, int stage, bool inside_box = false);
+fs::path ExecuteBoxInput(long id, int td, int stage, bool strict, bool inside_box = false);
+fs::path ExecuteBoxOutput(long id, int td, int stage, bool strict, bool inside_box = false);
+fs::path ExecuteBoxError(long id, int td, int stage, bool inside_box = false);
+fs::path ExecuteBoxFinalOutput(long id, int td, int stage);
 // TODO FEATURE(pin)
 fs::path ScoringBoxPath(long id, int td);
 fs::path ScoringBoxProgram(long id, int td, Compiler lang, bool inside_box = false);

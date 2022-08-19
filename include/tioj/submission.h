@@ -93,13 +93,13 @@ class Submission {
   SpecjudgeType specjudge_type;
   InterlibType interlib_type;
   Compiler specjudge_lang;
+  int stages;
   bool sandbox_strict; // false for backward-compatability
-  // TODO FEATURE(multistage): stages
   // task information
   struct TestdataLimit {
     int64_t vss, rss, output; // KiB
     int64_t time; // us
-    // vss & rss can be zero if unlimited; output & time must always be set
+    // vss & rss & output can be zero if unlimited; time must always be set
     bool ignore_verdict;
   };
   std::vector<TestdataLimit> td_limits;
@@ -129,6 +129,7 @@ class Submission {
       specjudge_type(SpecjudgeType::NORMAL),
       interlib_type(InterlibType::NONE),
       specjudge_lang(Compiler::GCC_CPP_17),
+      stages(1),
       sandbox_strict(false),
       verdict(Verdict::NUL),
       reporter(nullptr),

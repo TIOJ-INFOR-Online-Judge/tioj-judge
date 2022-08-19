@@ -227,9 +227,10 @@ bool SetupExecute(const Submission& sub, const TaskEntry& task) {
   if (sub.verdict != Verdict::NUL) return false; // CE check
   long id = sub.submission_internal_id;
   int subtask = task.task.subtask;
+  int stage = task.task.stage;
   if (cancelled_list.count(id)) return false; // cancellation check
 
-  auto workdir = Workdir(ExecuteBoxPath(id, subtask));
+  auto workdir = Workdir(ExecuteBoxPath(id, subtask, stage));
   CreateDirs(workdir);
   if (!sub.sandbox_strict) { // for non-strict: mount a tmpfs to limit overall filesize
     // TODO FEATURE(io-interactive): create FIFOs outside of workdir by hardlink
@@ -239,24 +240,29 @@ bool SetupExecute(const Submission& sub, const TaskEntry& task) {
       std::min(sub.td_limits[subtask].output * 2, kMaxOutput);
     MountTmpfs(workdir, tmpfs_size_kib);
   }
-  auto prog = ExecuteBoxProgram(id, subtask, sub.lang);
+  auto prog = ExecuteBoxProgram(id, subtask, stage, sub.lang);
   Copy(CompileBoxOutput(id, CompileSubtask::USERPROG, sub.lang),
        prog, ExecuteBoxProgramPerm(sub.lang, sub.sandbox_strict));
+  auto input_file = ExecuteBoxInput(id, subtask, stage, sub.sandbox_strict);
   if (sub.sandbox_strict) {
-    CreateDirs(ExecuteBoxTdStrictPath(id, subtask), fs::perms::owner_all); // 700
-    {
+    CreateDirs(ExecuteBoxTdStrictPath(id, subtask, stage), fs::perms::owner_all); // 700
+    if (stage == 0) {
       std::lock_guard lck(td_file_lock[sub.problem_id]);
-      Copy(TdInput(sub.problem_id, subtask), ExecuteBoxInput(id, subtask, sub.sandbox_strict),
+      Copy(TdInput(sub.problem_id, subtask), input_file,
           fs::perms::owner_read | fs::perms::owner_write); // 600
+    } else {
+      Move(ExecuteBoxFinalOutput(id, subtask, stage - 1), input_file);
+      fs::permissions(input_file, fs::perms::owner_read | fs::perms::owner_write); // 600
     }
-    fs::permissions(prog, fs::perms::all & ~(fs::perms::group_write)); // 755
   } else {
     fs::permissions(workdir, fs::perms::all);
-    {
+    if (stage == 0) {
       std::lock_guard lck(td_file_lock[sub.problem_id]);
-      Copy(TdInput(sub.problem_id, subtask), ExecuteBoxInput(id, subtask, sub.sandbox_strict), kPerm666);
+      Copy(TdInput(sub.problem_id, subtask), input_file, kPerm666);
+    } else {
+      Move(ExecuteBoxFinalOutput(id, subtask, stage - 1), input_file);
+      fs::permissions(input_file, kPerm666);
     }
-    fs::permissions(prog, fs::perms::all); // 777
   }
   return true;
 }
@@ -264,15 +270,20 @@ bool SetupExecute(const Submission& sub, const TaskEntry& task) {
 void FinalizeExecute(Submission& sub, const TaskEntry& task, const struct cjail_result& res) {
   long id = sub.submission_internal_id;
   int subtask = task.task.subtask;
+  int stage = task.task.stage;
   if (subtask >= (int)sub.td_results.size()) sub.td_results.resize(subtask + 1);
   auto& td_result = sub.td_results[subtask];
   td_result.execute_result = res;
-  Move(ExecuteBoxOutput(id, subtask, sub.sandbox_strict),
-       ExecuteBoxFinalOutput(id, subtask));
-  IGNORE_RETURN(chown(ExecuteBoxFinalOutput(id, subtask).c_str(), 0, 0));
-  if (!sub.sandbox_strict) {
-    auto workdir = Workdir(ExecuteBoxPath(id, subtask));
-    Umount(workdir);
+  Move(ExecuteBoxOutput(id, subtask, stage, sub.sandbox_strict),
+       ExecuteBoxFinalOutput(id, subtask, stage));
+  IGNORE_RETURN(chown(ExecuteBoxFinalOutput(id, subtask, stage).c_str(), 0, 0));
+  {
+    auto workdir = Workdir(ExecuteBoxPath(id, subtask, stage));
+    if (!sub.sandbox_strict) Umount(workdir);
+    RemoveAll(workdir);
+  }
+  if (stage > 0) {
+    RemoveAll(ExecuteBoxPath(id, subtask, stage - 1));
   }
   auto& lim = sub.td_limits[subtask];
   td_result.vss = res.stats.hiwater_vm;
@@ -288,10 +299,10 @@ void FinalizeExecute(Submission& sub, const TaskEntry& task, const struct cjail_
   } else if (res.timekill) {
     td_result.verdict = Verdict::TLE;
   } else if (res.info.si_code == CLD_KILLED || res.info.si_code == CLD_DUMPED) {
-    if (res.info.si_status == SIGXFSZ) {
+    if (res.info.si_status == SIGXFSZ || (sub.sandbox_strict && res.info.si_status == SIGPIPE)) {
       td_result.verdict = Verdict::OLE;
     } else if ((lim.vss && td_result.vss > lim.vss) || (lim.rss && td_result.rss > lim.rss)) {
-      // MLE will likely cause SIGSEGV or std::bad_alloc (SIGABRT), so we check it here
+      // MLE will likely cause SIGSEGV or std::bad_alloc (SIGABRT), so we check it before SIG
       td_result.verdict = Verdict::MLE;
     } else {
       td_result.verdict = Verdict::SIG;
@@ -305,8 +316,8 @@ void FinalizeExecute(Submission& sub, const TaskEntry& task, const struct cjail_
   } else {
     td_result.verdict = Verdict::NUL;
   }
-  spdlog::info("Execute finished: id={} subtask={} code={} status={} verdict={} time={} vss={} rss={}",
-               id, subtask, res.info.si_code, res.info.si_status, VerdictToAbr(td_result.verdict),
+  spdlog::info("Execute finished: id={} subtask={} stage={} code={} status={} verdict={} time={} vss={} rss={}",
+               id, subtask, stage, res.info.si_code, res.info.si_status, VerdictToAbr(td_result.verdict),
                td_result.time, td_result.vss, td_result.rss);
 }
 
@@ -324,7 +335,7 @@ bool SetupScoring(const Submission& sub, const TaskEntry& task) {
   }
   // TODO FEATURE(scoring-style): if SKIP, move file, call FinalizeScoring and return false
   CreateDirs(Workdir(ScoringBoxPath(id, subtask)), fs::perms::all);
-  Move(ExecuteBoxFinalOutput(id, subtask),
+  Move(ExecuteBoxFinalOutput(id, subtask, sub.stages - 1),
        ScoringBoxUserOutput(id, subtask), kPerm666);
   {
     std::lock_guard lck(td_file_lock[sub.problem_id]);
@@ -409,7 +420,7 @@ void FinalizeScoring(Submission& sub, const TaskEntry& task, const struct cjail_
   }
   // remove testdata-related files
   std::error_code ec;
-  RemoveAll(ExecuteBoxPath(id, subtask));
+  RemoveAll(ExecuteBoxPath(id, subtask, sub.stages - 1));
   RemoveAll(ScoringBoxPath(id, subtask));
   if (!cancelled_list.count(id)) {
     spdlog::info("Scoring finished: id={} subtask={} verdict={} score={} time={} vss={} rss={}",
@@ -447,8 +458,8 @@ void FinalizeSubmission(Submission& sub, const TaskEntry& task) {
 // Call corresponding Finalize if not skipped & pop task from queue
 void FinalizeTask(long id, const struct cjail_result& res, bool skipped = false) {
   auto& entry = task_list[id];
-  spdlog::info("Finalizing task: id={} taskid={} tasktype={} subtask={} skipped={}",
-               entry.submission_internal_id, id, TaskTypeName(entry.task.type), entry.task.subtask, skipped);
+  spdlog::info("Finalizing task: id={} taskid={} tasktype={} subtask={} stage={} skipped={}",
+               entry.submission_internal_id, id, TaskTypeName(entry.task.type), entry.task.subtask, entry.task.stage, skipped);
   if (!skipped) {
     auto& sub = submission_list[entry.submission_internal_id];
     switch (entry.task.type) {
@@ -464,8 +475,8 @@ void FinalizeTask(long id, const struct cjail_result& res, bool skipped = false)
 bool DispatchTask(long id) {
   auto& entry = task_list[id];
   auto& sub = submission_list[entry.submission_internal_id];
-  spdlog::info("Dispatching task: id={} taskid={} tasktype={} subtask={}",
-               entry.submission_internal_id, id, TaskTypeName(entry.task.type), entry.task.subtask);
+  spdlog::info("Dispatching task: id={} taskid={} tasktype={} subtask={} stage={}",
+               entry.submission_internal_id, id, TaskTypeName(entry.task.type), entry.task.subtask, entry.task.stage);
   bool res = false;
   switch (entry.task.type) {
     case TaskType::COMPILE: res = SetupCompile(sub, entry); break;
@@ -535,30 +546,36 @@ std::vector<int> GetQueuedSubmissionID() {
 }
 
 bool PushSubmission(Submission&& sub, size_t max_queue) {
-  // Build this dependency graph:
-  //    compile_sj ------------+-----+
-  //                           |     |
-  //                           |     v
-  // compile ---+-> execute_0 ---> scoring ---+---> finalize
-  //            |              |              |
-  //            +-> execute_n -+-> scoring ---+
+  // Build this dependency graph (for 2 tds, 2 stages):
+  //    compile_sj -------------------------------+-----+
+  //                                              |     |
+  //                                              |     v
+  // compile ---+-> execute_0_0 ---> execute_0_1 ---> scoring ---+---> finalize
+  //            |                                 |              |
+  //            +-> execute_1_0 ---> execute_1_1 -+-> scoring ---+
   //
   std::unique_lock lck(task_mtx);
   if (max_queue > 0 && submission_list.size() >= max_queue) return false;
 
+  sub.stages = std::min(std::max(1, sub.stages), 32);
   int id = sub.submission_internal_id;
   long priority = sub.priority;
-  std::vector<TaskEntry> executes, scorings;
-  TaskEntry finalize(id, {TaskType::FINALIZE, 0}, priority);
+  std::vector<std::vector<TaskEntry>> executes;
+  std::vector<TaskEntry> scorings;
+  TaskEntry finalize(id, {TaskType::FINALIZE, 0, 0}, priority);
   for (int i = 0; i < (int)sub.td_limits.size(); i++) {
-    executes.emplace_back(id, (Task){TaskType::EXECUTE, i}, priority);
+    executes.emplace_back();
+    for (int j = 0; j < sub.stages; j++) {
+      executes.back().emplace_back(id, (Task){TaskType::EXECUTE, i, j}, priority);
+      if (j > 0) Link(executes.back()[j - 1], executes.back()[j]);
+    }
     scorings.emplace_back(id, (Task){TaskType::SCORING, i}, priority);
-    Link(executes.back(), scorings.back());
+    Link(executes.back().back(), scorings.back());
     Link(scorings.back(), finalize);
   }
   {
     TaskEntry compile(id, {TaskType::COMPILE, (int)CompileSubtask::USERPROG}, priority);
-    for (auto& i : executes) Link(compile, i);
+    for (auto& i : executes) Link(compile, i[0]);
     if (executes.empty()) Link(compile, finalize);
     InsertTaskList(std::move(compile));
   }
@@ -569,7 +586,7 @@ bool PushSubmission(Submission&& sub, size_t max_queue) {
     if (executes.empty()) Link(compile, finalize);
     InsertTaskList(std::move(compile));
   }
-  for (auto& i : executes) InsertTaskList(std::move(i));
+  for (auto& i : executes) for (auto& j : i) InsertTaskList(std::move(j));
   for (auto& i : scorings) InsertTaskList(std::move(i));
   InsertTaskList(std::move(finalize));
   submission_list.insert({id, std::move(sub)});

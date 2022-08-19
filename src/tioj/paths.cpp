@@ -112,11 +112,11 @@ fs::path CompileBoxOutput(long id, CompileSubtask subtask, Compiler lang, bool i
       / CompileResultName(subtask, lang);
 }
 
-fs::path ExecuteBoxPath(long id, int td) {
-  return SubmissionRunPath(id) / ("execute" + PadInt(td, 3));
+fs::path ExecuteBoxPath(long id, int td, int stage) {
+  return SubmissionRunPath(id) / ("execute" + PadInt(td, 3) + "_" + PadInt(stage, 2));
 }
-fs::path ExecuteBoxProgram(long id, int td, Compiler lang, bool inside_box) {
-  return Workdir(BoxRoot(ExecuteBoxPath(id, td), inside_box))
+fs::path ExecuteBoxProgram(long id, int td, int stage, Compiler lang, bool inside_box) {
+  return Workdir(BoxRoot(ExecuteBoxPath(id, td, stage), inside_box))
       / ("prog" + ProgramExtension(lang));
 }
 fs::perms ExecuteBoxProgramPerm(Compiler lang, bool strict) {
@@ -141,28 +141,28 @@ fs::perms ExecuteBoxProgramPerm(Compiler lang, bool strict) {
   }
   __builtin_unreachable();
 }
-fs::path ExecuteBoxTdStrictPath(long id, int td, bool inside_box) {
-  return BoxRoot(ExecuteBoxPath(id, td), inside_box) / "td";
+fs::path ExecuteBoxTdStrictPath(long id, int td, int stage, bool inside_box) {
+  return BoxRoot(ExecuteBoxPath(id, td, stage), inside_box) / "td";
 }
-fs::path ExecuteBoxInput(long id, int td, bool strict, bool inside_box) {
+fs::path ExecuteBoxInput(long id, int td, int stage, bool strict, bool inside_box) {
   if (strict) {
-    return ExecuteBoxTdStrictPath(id, td, inside_box) / "input";
+    return ExecuteBoxTdStrictPath(id, td, stage, inside_box) / "input";
   } else {
-    return Workdir(BoxRoot(ExecuteBoxPath(id, td), inside_box)) / "input";
+    return Workdir(BoxRoot(ExecuteBoxPath(id, td, stage), inside_box)) / "input";
   }
 }
-fs::path ExecuteBoxOutput(long id, int td, bool strict, bool inside_box) {
+fs::path ExecuteBoxOutput(long id, int td, int stage, bool strict, bool inside_box) {
   if (strict) {
-    return ExecuteBoxTdStrictPath(id, td, inside_box) / "output";
+    return ExecuteBoxTdStrictPath(id, td, stage, inside_box) / "output";
   } else {
-    return Workdir(BoxRoot(ExecuteBoxPath(id, td), inside_box)) / "output";
+    return Workdir(BoxRoot(ExecuteBoxPath(id, td, stage), inside_box)) / "output";
   }
 }
-fs::path ExecuteBoxError(long id, int td, bool inside_box) {
-  return Workdir(BoxRoot(ExecuteBoxPath(id, td), inside_box)) / "error";
+fs::path ExecuteBoxError(long id, int td, int stage, bool inside_box) {
+  return Workdir(BoxRoot(ExecuteBoxPath(id, td, stage), inside_box)) / "error";
 }
-fs::path ExecuteBoxFinalOutput(long id, int td) {
-  return ExecuteBoxPath(id, td) / "output";
+fs::path ExecuteBoxFinalOutput(long id, int td, int stage)  {
+  return ExecuteBoxPath(id, td, stage) / "output";
 }
 
 fs::path ScoringBoxPath(long id, int td) {
