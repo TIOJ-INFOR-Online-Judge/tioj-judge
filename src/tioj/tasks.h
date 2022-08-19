@@ -7,8 +7,8 @@
 
 struct Task {
   TaskType type;
-  int subtask;
   // testdata # for EXECUTE & SCORING; (int)CompileSubtask for COMPILE
+  int subtask;
   int stage;
 };
 

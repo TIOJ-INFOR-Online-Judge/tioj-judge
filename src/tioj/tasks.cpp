@@ -211,6 +211,9 @@ struct cjail_result RunScoring(const Submission& sub, const Task& task, int uid)
     });
   } else {
     opt.command.push_back(ScoringBoxMetaFile(-1, -1, true));
+    if (sub.specjudge_type == SpecjudgeType::NORMAL) {
+      opt.command.insert(opt.command.end(), sub.default_scoring_args.begin(), sub.default_scoring_args.end());
+    }
   }
   opt.workdir = Workdir("/");
   opt.output = ScoringBoxOutput(-1, -1, true);

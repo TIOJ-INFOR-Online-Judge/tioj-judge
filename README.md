@@ -9,11 +9,13 @@
 - Judge multiple submissions in parallel
 - Isolated and size-limited tmpfs to prevent DoS attacks
 - New powerful special judge mode that can access lots of information, set arbitrary score and override results
+- Multistage problems (similar to CMS's TwoStep mode)
 - Optional strict mode for more isolation:
     - Compiles static executables and run them without any shared libraries present (only for C/C++/Haskell)
     - Use pipes for standard input / output to avoid seeking or re-opening
 - A library interface `libtioj` that can be used independently
 - A time multiplier to compensate speed difference of multiple judge clients
+- Support some basic judging modes (such as floating-point compare, strict compare and white-diff compare) without the need to provide special judge program
 
 ## Judge Server
 

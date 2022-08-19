@@ -328,7 +328,9 @@ void FinalizeExecute(Submission& sub, const TaskEntry& task, const struct cjail_
                td_result.time, td_result.vss, td_result.rss);
 }
 
-bool SetupScoring(const Submission& sub, const TaskEntry& task) {
+void FinalizeScoring(Submission& sub, const TaskEntry& task, const struct cjail_result& res);
+
+bool SetupScoring(Submission& sub, const TaskEntry& task) {
   if (sub.verdict != Verdict::NUL) return false; // CE check
   long id = sub.submission_internal_id;
   int subtask = task.task.subtask;
@@ -340,10 +342,14 @@ bool SetupScoring(const Submission& sub, const TaskEntry& task) {
     if (sub.reporter) sub.reporter->ReportScoringResult(sub, subtask);
     return false;
   }
-  // TODO FEATURE(scoring-style): if SKIP, move file, call FinalizeScoring and return false
   CreateDirs(Workdir(ScoringBoxPath(id, subtask)), fs::perms::all);
   {
     auto user_output = ExecuteBoxFinalOutput(id, subtask, sub.stages - 1);
+    if (sub.specjudge_type == SpecjudgeType::SKIP) {
+      Move(user_output, ScoringBoxOutput(id, subtask));
+      FinalizeScoring(sub, task, {});
+      return false;
+    }
     auto scoring_user_output = ScoringBoxUserOutput(id, subtask);
     if (fs::exists(user_output)) {
       Move(user_output, scoring_user_output, kPerm666);

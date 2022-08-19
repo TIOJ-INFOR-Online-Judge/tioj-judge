@@ -18,8 +18,8 @@ extern double kTimeMultiplier;
 #define ENUM_SPECJUDGE_TYPE_ \
   X(NORMAL) \
   X(SPECJUDGE_OLD) \
-  X(SPECJUDGE_NEW)
-// TODO FEATURE(scoring-style): SKIP (use output directly as JSON result)
+  X(SPECJUDGE_NEW) \
+  X(SKIP)
 enum class SpecjudgeType {
 #define X(name) name,
   ENUM_SPECJUDGE_TYPE_
@@ -95,6 +95,7 @@ class Submission {
   Compiler specjudge_lang;
   int stages;
   bool sandbox_strict; // false for backward-compatability
+  std::vector<std::string> default_scoring_args;
   // task information
   struct TestdataLimit {
     int64_t vss, rss, output; // KiB
