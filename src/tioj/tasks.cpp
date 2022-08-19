@@ -140,8 +140,12 @@ struct cjail_result RunExecute(const Submission& sub, const Task& task, int uid)
   if (sub.stages > 1) opt.command.push_back(std::to_string(stage));
   opt.workdir = Workdir("/");
   opt.uid = opt.gid = uid;
-  opt.wall_time = std::max(long(lim.time * 1.2), lim.time + 1'000'000);
-  opt.cpu_time = lim.time + 50'000; // a little bit of margin just in case
+  long lim_time = lim.time;
+  if (stage > 0) {
+    lim_time -= sub.td_results[subtask].time;
+  }
+  opt.wall_time = std::max(long(lim_time * 1.2), lim_time + 1'000'000);
+  opt.cpu_time = lim_time + 50'000; // a little bit of margin just in case
   opt.wall_time /= kTimeMultiplier;
   opt.cpu_time /= kTimeMultiplier;
   opt.rss = lim.rss + 1024;

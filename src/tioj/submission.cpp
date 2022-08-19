@@ -230,6 +230,7 @@ bool SetupExecute(const Submission& sub, const TaskEntry& task) {
   int stage = task.task.stage;
   if (cancelled_list.count(id)) return false; // cancellation check
 
+  if (stage > 0 && sub.td_results[subtask].verdict != Verdict::NUL) return false;
   auto workdir = Workdir(ExecuteBoxPath(id, subtask, stage));
   CreateDirs(workdir);
   if (!sub.sandbox_strict) { // for non-strict: mount a tmpfs to limit overall filesize
@@ -286,10 +287,16 @@ void FinalizeExecute(Submission& sub, const TaskEntry& task, const struct cjail_
     RemoveAll(ExecuteBoxPath(id, subtask, stage - 1));
   }
   auto& lim = sub.td_limits[subtask];
-  td_result.vss = res.stats.hiwater_vm;
-  td_result.rss = res.rus.ru_maxrss;
-  td_result.time = ToUs(res.rus.ru_utime) + ToUs(res.rus.ru_stime);
-  td_result.score = 0;
+  if (stage == 0) {
+    td_result.vss = res.stats.hiwater_vm;
+    td_result.rss = res.rus.ru_maxrss;
+    td_result.time = ToUs(res.rus.ru_utime) + ToUs(res.rus.ru_stime);
+    td_result.score = 0;
+  } else {
+    td_result.vss = std::max(td_result.vss, (int64_t)res.stats.hiwater_vm);
+    td_result.rss = std::max(td_result.rss, (int64_t)res.rus.ru_maxrss);
+    td_result.time += ToUs(res.rus.ru_utime) + ToUs(res.rus.ru_stime);
+  }
   if (res.timekill == -1) {
     // timekill = -1 means SandboxExec error (see sandbox_exec.cpp, sandbox_main.cpp)
     td_result.verdict = Verdict::EE;
@@ -335,8 +342,17 @@ bool SetupScoring(const Submission& sub, const TaskEntry& task) {
   }
   // TODO FEATURE(scoring-style): if SKIP, move file, call FinalizeScoring and return false
   CreateDirs(Workdir(ScoringBoxPath(id, subtask)), fs::perms::all);
-  Move(ExecuteBoxFinalOutput(id, subtask, sub.stages - 1),
-       ScoringBoxUserOutput(id, subtask), kPerm666);
+  {
+    auto user_output = ExecuteBoxFinalOutput(id, subtask, sub.stages - 1);
+    auto scoring_user_output = ScoringBoxUserOutput(id, subtask);
+    if (fs::exists(user_output)) {
+      Move(user_output, scoring_user_output, kPerm666);
+    } else {
+      // touch file if not exist (if multistage skipped)
+      std::ofstream(scoring_user_output).close();
+      fs::permissions(scoring_user_output, kPerm666);
+    }
+  }
   {
     std::lock_guard lck(td_file_lock[sub.problem_id]);
     Copy(TdInput(sub.problem_id, subtask), ScoringBoxTdInput(id, subtask), kPerm666);

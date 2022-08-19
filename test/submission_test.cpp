@@ -94,4 +94,24 @@ int main(int argc, char** argv){ int a; scanf("%d",&a); printf("%d", a+argv[1][0
   TeardownSubmission(id);
 }
 
+TEST_F(ExampleProblem, MultistageTL) {
+  kMaxParallel = 2;
+  SetUp(4, 2);
+  AssertVerdictReporter reporter(Verdict::TLE);
+  sub.reporter = &reporter;
+  sub.stages = 3;
+  long id = SetupSubmission(sub, 8, Compiler::GCC_CPP_17, kTime, false, R"(#include <ctime>
+int main(int argc, char** argv){ auto a = clock(); while (clock()-a<0.6*CLOCKS_PER_SEC); })",
+      SpecjudgeType::SPECJUDGE_NEW, R"(#include <iostream>
+#include <fstream>
+#include "nlohmann/json.hpp"
+int main(int argc, char**argv){
+  std::ifstream fin(argv[1]); nlohmann::json data; fin >> data;
+  std::cout << nlohmann::json{{"verdict", data["stats"]["original_verdict"].get<std::string>()}};
+})");
+  PushSubmission(std::move(sub));
+  WorkLoop(false);
+  TeardownSubmission(id);
+}
+
 // TODO: multiple submission rejudge
