@@ -6,7 +6,7 @@
 
 class ExampleProblem : public ::testing::Test {
  protected:
-  void SetUp(int problem_id_, int td_num, bool sandbox_strict);
+  void SetUp(int problem_id_, int td_num);
   void TearDown() override;
 
   Submission sub;
