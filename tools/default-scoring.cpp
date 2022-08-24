@@ -124,14 +124,16 @@ int main(int argc, char** argv) {
       res = WordCompare(f_ans, f_usr, check([&](long double ans, long double usr) {
         return std::fabs(ans - usr) <= threshold * std::fabs(ans);
       }));
-    } else {
+    } else if (type == "absolute-relative") {
       res = WordCompare(f_ans, f_usr, check([&](long double ans, long double usr) {
         return std::fabs(ans - usr) <= threshold * std::max(1.0L, std::fabs(ans));
       }));
     }
-  } else {
+    // else: WA
+  } else if (argc == 2 || (argc > 2 && std::string(argv[2]) == "line")) {
     res = LineCompare(f_ans, f_usr);
   }
+  // else: WA
   if (res) {
     std::cout << nlohmann::json{{"verdict", "AC"}};
   } else {

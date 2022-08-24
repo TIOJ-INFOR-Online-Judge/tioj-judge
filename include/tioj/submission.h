@@ -84,7 +84,7 @@ class Submission {
   int submission_id;
   int contest_id;
   long priority;
-  int64_t submission_time; // UNIX timestamp
+  int64_t submission_time; // UNIX timestamp, microseconds
   int submitter_id;
   std::string submitter_name, submitter_nickname;
   Compiler lang;
@@ -113,6 +113,7 @@ class Submission {
     int64_t time; // us
     int64_t score; // 10^(-6)
     Verdict verdict;
+    std::string message_type, message;
     TestdataResult() : execute_result{}, vss{}, rss{}, time{}, score{}, verdict(Verdict::NUL) {}
   };
   std::vector<TestdataResult> td_results;

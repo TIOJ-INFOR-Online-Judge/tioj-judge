@@ -487,6 +487,10 @@ nlohmann::json TdResultsJSON(const Submission& sub) {
     } else {
       tddata["vss"] = nowtd.vss;
     }
+    if (!nowtd.message.empty()) {
+      tddata["message_type"] = nowtd.message_type;
+      tddata["message"] = nowtd.message;
+    }
     tds.push_back(std::move(tddata));
   }
   return tds;

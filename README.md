@@ -15,7 +15,7 @@
     - Use pipes for standard input / output to avoid seeking or re-opening
 - A library interface `libtioj` that can be used independently
 - A time multiplier to compensate speed difference of multiple judge clients
-- Support some basic judging modes (such as floating-point compare, strict compare and white-diff compare) without the need to provide special judge program
+- Support some basic judging modes (such as floating-point compare, strict compare and white-diff compare) without the need of user-provided special judge program
 
 ## Judge Server
 

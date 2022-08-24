@@ -13,7 +13,7 @@
 - [x] Multistage problems & update README
 - [x] Linear time calibration
 - [x] Different comparison methods
-- [ ] Additional message
+- [x] Additional message
 - [ ] Optionally invoke special judge between stages in multistage
 
 ## Future
@@ -27,6 +27,8 @@
     - Treat all processes as one task
 - [ ] Output-only
     - Needs a lot of modifications on web server and API
+- [ ] Optimize task result sending (not send every task result every time)
+- [ ] Refactor: add testdata path into `class Submission` and move related paths out of libtioj
 - [ ] Periodically clear testdata for recently unused problems
 - [ ] Add more languages
 - [ ] Add non-root judge (use libfakechroot for isolation; no RSS limiting & VSS reporting support)

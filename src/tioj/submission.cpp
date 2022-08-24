@@ -46,6 +46,7 @@ nlohmann::json Submission::TestdataMeta(int subtask) const {
     {"submission_time", submission_time},
     {"compiler", CompilerName(lang)},
     {"testdata_index", subtask},
+    {"original_verdict", VerdictToAbr(td_results[subtask].verdict)},
     {"limits", {
       {"time_us", lim.time},
       {"vss_kb", lim.vss},
@@ -53,7 +54,6 @@ nlohmann::json Submission::TestdataMeta(int subtask) const {
       {"output_kb", lim.output},
     }},
     {"stats", {
-      {"original_verdict", VerdictToAbr(td_results[subtask].verdict)},
       {"exit_code", res.info.si_status},
       {"real_us", ToUs(res.time)},
       {"user_us", ToUs(res.rus.ru_utime)},
@@ -382,7 +382,7 @@ void FinalizeScoring(Submission& sub, const TaskEntry& task, const struct cjail_
   auto& td_result = sub.td_results[subtask];
   auto output_path = ScoringBoxOutput(id, subtask);
 
-  td_result.verdict = Verdict::WA;
+  // default: WA or keep verdict (if TLE etc.)
   td_result.score = 0;
   if (!fs::is_regular_file(output_path) || res.info.si_status != 0) {
     // WA
@@ -401,13 +401,10 @@ void FinalizeScoring(Submission& sub, const TaskEntry& task, const struct cjail_
         std::ifstream fin(output_path);
         fin >> json;
       }
-      if (auto it = json.find("verdict"); it != json.end()) {
-        if (it->is_string()) {
-          td_result.verdict = AbrToVerdict(it->get<std::string>(), true);
-          if (td_result.verdict == Verdict::NUL) td_result.verdict = Verdict::WA;
-          if (td_result.verdict == Verdict::AC) td_result.score = 100'000'000;
-        }
-      }
+      if (auto it = json.find("verdict"); it != json.end() && it->is_string()) {
+        td_result.verdict = AbrToVerdict(it->get<std::string>(), true);
+        if (td_result.verdict == Verdict::AC) td_result.score = 100'000'000;
+      } // else: WA
       if (auto it = json.find("score"); it != json.end()) {
         long double score = td_result.score / 1'000'000;
         try {
@@ -421,25 +418,40 @@ void FinalizeScoring(Submission& sub, const TaskEntry& task, const struct cjail_
         if (score < -1e+6) score = -1e+6;
         td_result.score = (score * 1'000'000) + 0.5;
       }
-      if (auto it = json.find("time_us"); it != json.end()) {
+      if (auto it = json.find("time_us"); it != json.end() && it->is_number()) {
         try {
-          if (it->is_number()) td_result.time = it->get<long>();
+          td_result.time = it->get<long>();
         } catch (...) {}
       }
-      if (auto it = json.find("vss_kib"); it != json.end()) {
+      if (auto it = json.find("vss_kib"); it != json.end() && it->is_number()) {
         try {
-          if (it->is_number()) td_result.vss = it->get<long>();
+          td_result.vss = it->get<long>();
         } catch (...) {}
       }
-      if (auto it = json.find("rss_kib"); it != json.end()) {
+      if (auto it = json.find("rss_kib"); it != json.end() && it->is_number()) {
         try {
-          if (it->is_number()) td_result.rss = it->get<long>();
+          td_result.rss = it->get<long>();
+        } catch (...) {}
+      }
+      if (auto it_type = json.find("message_type"), it_msg = json.find("message");
+          it_type != json.end() && it_msg != json.end() &&
+          it_type->is_string() && it_msg->is_string()) {
+        try {
+          auto& msg_type = it_type->get_ref<std::string&>();
+          if (msg_type == "text" || msg_type == "html") {
+            constexpr size_t kMaxLen = 16384;
+            td_result.message_type = std::move(msg_type);
+            td_result.message = std::move(it_msg->get_ref<std::string&>());
+            if (td_result.message.size() > kMaxLen) td_result.message.resize(kMaxLen);
+          }
         } catch (...) {}
       }
     } catch (nlohmann::json::exception&) {
       // WA
     }
   }
+  if (td_result.verdict == Verdict::NUL) td_result.verdict = Verdict::WA;
+
   // remove testdata-related files
   std::error_code ec;
   RemoveAll(ExecuteBoxPath(id, subtask, sub.stages - 1));
@@ -457,7 +469,7 @@ void FinalizeSubmission(Submission& sub, const TaskEntry& task) {
   long id = sub.submission_internal_id;
   if (sub.remove_submission) RemoveAll(SubmissionCodePath(id));
   RemoveAll(SubmissionRunPath(id));
-  if (sub.td_results.size()) {
+  if (sub.verdict == Verdict::NUL) {
     sub.verdict = Verdict::AC;
     for (size_t i = 0; i < sub.td_results.size(); i++) {
       if (sub.td_limits[i].ignore_verdict) continue;
