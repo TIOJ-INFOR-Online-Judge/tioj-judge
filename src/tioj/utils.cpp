@@ -1,6 +1,7 @@
 #include "utils.h"
 
 #include <fcntl.h>
+#include <unistd.h>
 #include <sys/wait.h>
 #include <sys/mount.h>
 #include <atomic>
