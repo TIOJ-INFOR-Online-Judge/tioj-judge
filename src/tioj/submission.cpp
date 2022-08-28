@@ -29,14 +29,15 @@ inline long ToUs(const struct timeval& v) {
 
 } // namespace
 
-nlohmann::json Submission::TestdataMeta(int subtask) const {
+nlohmann::json Submission::TestdataMeta(int subtask, int stage) const {
   const struct cjail_result& res = td_results[subtask].execute_result;
   const TestdataLimit& lim = td_limits[subtask];
+  const TestdataResult& td_result = td_results[subtask];
   return {
-    {"input_file", ScoringBoxTdInput(-1, -1, true)},
-    {"answer_file", ScoringBoxTdOutput(-1, -1, true)},
-    {"user_output_file", ScoringBoxUserOutput(-1, -1, true)},
-    {"user_code_file", ScoringBoxCode(-1, -1, lang, true)},
+    {"input_file", ScoringBoxTdInput(-1, -1, -1, true)},
+    {"answer_file", ScoringBoxTdOutput(-1, -1, -1, true)},
+    {"user_output_file", ScoringBoxUserOutput(-1, -1, -1, true)},
+    {"user_code_file", ScoringBoxCode(-1, -1, -1, lang, true)},
     {"problem_id", problem_id},
     {"contest_id", contest_id},
     {"submission_id", submission_id},
@@ -46,7 +47,10 @@ nlohmann::json Submission::TestdataMeta(int subtask) const {
     {"submission_time", submission_time},
     {"compiler", CompilerName(lang)},
     {"testdata_index", subtask},
-    {"original_verdict", VerdictToAbr(td_results[subtask].verdict)},
+    {"current_stage", stage},
+    {"original_verdict", VerdictToAbr(td_result.verdict)},
+    {"message_type", td_result.message_type},
+    {"message", td_result.message},
     {"limits", {
       {"time_us", lim.time},
       {"vss_kb", lim.vss},
@@ -230,7 +234,8 @@ bool SetupExecute(const Submission& sub, const TaskEntry& task) {
   int stage = task.task.stage;
   if (cancelled_list.count(id)) return false; // cancellation check
 
-  if (stage > 0 && sub.td_results[subtask].verdict != Verdict::NUL) return false;
+  auto& td_result = sub.td_results[subtask];
+  if (stage > 0 && (td_result.skip_stage || td_result.verdict != Verdict::NUL)) return false;
   auto workdir = Workdir(ExecuteBoxPath(id, subtask, stage));
   CreateDirs(workdir);
   if (!sub.sandbox_strict) { // for non-strict: mount a tmpfs to limit overall filesize
@@ -334,23 +339,28 @@ bool SetupScoring(Submission& sub, const TaskEntry& task) {
   if (sub.verdict != Verdict::NUL) return false; // CE check
   long id = sub.submission_internal_id;
   int subtask = task.task.subtask;
+  int stage = task.task.stage;
   if (cancelled_list.count(id)) return false; // cancellation check
 
+  bool last_stage = stage == sub.stages - 1;
+  const auto& td_result = sub.td_results[subtask];
   // if already TLE/MLE/etc, do not invoke old-style special judge
-  if (sub.td_results[subtask].verdict != Verdict::NUL &&
-      sub.specjudge_type != SpecjudgeType::SPECJUDGE_NEW) {
-    if (sub.reporter) sub.reporter->ReportScoringResult(sub, subtask);
+  // if specjudge demends skip, skip anyway
+  if (td_result.skip_stage ||
+      (td_result.verdict != Verdict::NUL &&
+       sub.specjudge_type != SpecjudgeType::SPECJUDGE_NEW)) {
+    if (last_stage && sub.reporter) sub.reporter->ReportScoringResult(sub, subtask);
     return false;
   }
-  CreateDirs(Workdir(ScoringBoxPath(id, subtask)), fs::perms::all);
+  CreateDirs(Workdir(ScoringBoxPath(id, subtask, stage)), fs::perms::all);
   {
-    auto user_output = ExecuteBoxFinalOutput(id, subtask, sub.stages - 1);
+    auto user_output = ExecuteBoxFinalOutput(id, subtask, stage);
     if (sub.specjudge_type == SpecjudgeType::SKIP) {
-      Move(user_output, ScoringBoxOutput(id, subtask));
+      Move(user_output, ScoringBoxOutput(id, subtask, stage));
       FinalizeScoring(sub, task, {});
       return false;
     }
-    auto scoring_user_output = ScoringBoxUserOutput(id, subtask);
+    auto scoring_user_output = ScoringBoxUserOutput(id, subtask, stage);
     if (fs::exists(user_output)) {
       Move(user_output, scoring_user_output, kPerm666);
     } else {
@@ -361,17 +371,17 @@ bool SetupScoring(Submission& sub, const TaskEntry& task) {
   }
   {
     std::lock_guard lck(td_file_lock[sub.problem_id]);
-    Copy(TdInput(sub.problem_id, subtask), ScoringBoxTdInput(id, subtask), kPerm666);
-    Copy(TdOutput(sub.problem_id, subtask), ScoringBoxTdOutput(id, subtask), kPerm666);
+    Copy(TdInput(sub.problem_id, subtask), ScoringBoxTdInput(id, subtask, stage), kPerm666);
+    Copy(TdOutput(sub.problem_id, subtask), ScoringBoxTdOutput(id, subtask, stage), kPerm666);
   }
-  Copy(SubmissionUserCode(id), ScoringBoxCode(id, subtask, sub.lang), kPerm666);
+  Copy(SubmissionUserCode(id), ScoringBoxCode(id, subtask, stage, sub.lang), kPerm666);
   // special judge program
   fs::path specjudge_prog = sub.specjudge_type == SpecjudgeType::NORMAL ?
       DefaultScoringPath() : CompileBoxOutput(id, CompileSubtask::SPECJUDGE, sub.specjudge_lang);
-  Copy(specjudge_prog, ScoringBoxProgram(id, subtask, sub.specjudge_lang), fs::perms::all);
+  Copy(specjudge_prog, ScoringBoxProgram(id, subtask, stage, sub.specjudge_lang), fs::perms::all);
   { // write meta file
-    std::ofstream fout(ScoringBoxMetaFile(id, subtask));
-    fout << sub.TestdataMeta(subtask);
+    std::ofstream fout(ScoringBoxMetaFile(id, subtask, stage));
+    fout << sub.TestdataMeta(subtask, stage);
   }
   return true;
 }
@@ -379,19 +389,26 @@ bool SetupScoring(Submission& sub, const TaskEntry& task) {
 void FinalizeScoring(Submission& sub, const TaskEntry& task, const struct cjail_result& res) {
   long id = sub.submission_internal_id;
   int subtask = task.task.subtask;
+  int stage = task.task.stage;
   auto& td_result = sub.td_results[subtask];
-  auto output_path = ScoringBoxOutput(id, subtask);
+  auto output_path = ScoringBoxOutput(id, subtask, stage);
 
-  // default: WA or keep verdict (if TLE etc.)
+  bool last_stage = stage == sub.stages - 1;
+  // default: WA or keep verdict (if TLE etc.) for last_stage,
+  //          continue otherwise
   td_result.score = 0;
   if (!fs::is_regular_file(output_path) || res.info.si_status != 0) {
-    // WA
+    // WA or continue
   } else if (sub.specjudge_type == SpecjudgeType::SPECJUDGE_OLD) {
     int x = 1;
     std::ifstream fin(output_path);
     if (fin >> x && x == 0) {
-      td_result.verdict = Verdict::AC;
-      td_result.score = 100'000'000;
+      if (last_stage) {
+        td_result.verdict = Verdict::AC;
+        td_result.score = 100'000'000;
+      } // else: continue
+    } else if (!last_stage) {
+      td_result.verdict = Verdict::WA;
     }
   } else {
     // parse judge result
@@ -450,17 +467,26 @@ void FinalizeScoring(Submission& sub, const TaskEntry& task, const struct cjail_
       // WA
     }
   }
-  if (td_result.verdict == Verdict::NUL) td_result.verdict = Verdict::WA;
+  if (!last_stage && td_result.verdict != Verdict::NUL) {
+    td_result.skip_stage = true;
+  } else if (last_stage && td_result.verdict == Verdict::NUL) {
+    td_result.verdict = Verdict::WA;
+  }
+
+  // move possibly modified user output back to original position
+  // so that it can be read by the next stage
+  if (!last_stage && !td_result.skip_stage && sub.specjudge_type != SpecjudgeType::SKIP) {
+    Move(ScoringBoxUserOutput(id, subtask, stage), ExecuteBoxFinalOutput(id, subtask, stage));
+  }
 
   // remove testdata-related files
-  std::error_code ec;
-  RemoveAll(ExecuteBoxPath(id, subtask, sub.stages - 1));
-  RemoveAll(ScoringBoxPath(id, subtask));
+  if (last_stage) RemoveAll(ExecuteBoxPath(id, subtask, sub.stages - 1));
+  RemoveAll(ScoringBoxPath(id, subtask, stage));
   if (!cancelled_list.count(id)) {
     spdlog::info("Scoring finished: id={} subtask={} verdict={} score={} time={} vss={} rss={}",
                  id, subtask, VerdictToAbr(td_result.verdict),
                  td_result.score, td_result.time, td_result.vss, td_result.rss);
-    if (sub.reporter) sub.reporter->ReportScoringResult(sub, subtask);
+    if (last_stage && sub.reporter) sub.reporter->ReportScoringResult(sub, subtask);
   }
 }
 
@@ -580,13 +606,13 @@ std::vector<int> GetQueuedSubmissionID() {
 }
 
 bool PushSubmission(Submission&& sub, size_t max_queue) {
-  // Build this dependency graph (for 2 tds, 2 stages):
-  //    compile_sj -------------------------------+-----+
-  //                                              |     |
-  //                                              |     v
-  // compile ---+-> execute_0_0 ---> execute_0_1 ---> scoring ---+---> finalize
-  //            |                                 |              |
-  //            +-> execute_1_0 ---> execute_1_1 -+-> scoring ---+
+  // Build this dependency graph (for 2 tds, 2 stages, judge between stages):
+  //    compile_sj --------------+--------+
+  //                             |        |
+  //                             |        v
+  // compile ---+-> execute_0_0 ---> scoring_0_0---> execute_0_1 ---> scoring_0_1 ---+---> finalize
+  //            |                |                                                   |
+  //            +-> execute_1_0 -+-> scoring_1_0---> execute_1_1 -+-> scoring_1_1 ---+
   //
   std::unique_lock lck(task_mtx);
   if (max_queue > 0 && submission_list.size() >= max_queue) return false;
@@ -594,18 +620,27 @@ bool PushSubmission(Submission&& sub, size_t max_queue) {
   sub.stages = std::min(std::max(1, sub.stages), 32);
   int id = sub.submission_internal_id;
   long priority = sub.priority;
-  std::vector<std::vector<TaskEntry>> executes;
-  std::vector<TaskEntry> scorings;
+  std::vector<std::vector<TaskEntry>> executes, scorings;
   TaskEntry finalize(id, {TaskType::FINALIZE, 0, 0}, priority);
   for (int i = 0; i < (int)sub.td_limits.size(); i++) {
-    executes.emplace_back();
-    for (int j = 0; j < sub.stages; j++) {
-      executes.back().emplace_back(id, (Task){TaskType::EXECUTE, i, j}, priority);
-      if (j > 0) Link(executes.back()[j - 1], executes.back()[j]);
+    executes.emplace_back(); // index i
+    scorings.emplace_back();
+    if (sub.judge_between_stages) {
+      for (int j = 0; j < sub.stages; j++) {
+        executes[i].emplace_back(id, (Task){TaskType::EXECUTE, i, j}, priority);
+        scorings[i].emplace_back(id, (Task){TaskType::SCORING, i, j}, priority);
+        Link(executes[i][j], scorings[i][j]);
+        if (j > 0) Link(scorings[i][j - 1], executes[i][j]);
+      }
+    } else {
+      for (int j = 0; j < sub.stages; j++) {
+        executes[i].emplace_back(id, (Task){TaskType::EXECUTE, i, j}, priority);
+        if (j > 0) Link(executes[i][j - 1], executes[i][j]);
+      }
+      scorings[i].emplace_back(id, (Task){TaskType::SCORING, i, sub.stages - 1}, priority);
+      Link(executes[i].back(), scorings[i].back());
     }
-    scorings.emplace_back(id, (Task){TaskType::SCORING, i}, priority);
-    Link(executes.back().back(), scorings.back());
-    Link(scorings.back(), finalize);
+    Link(scorings[i].back(), finalize);
   }
   {
     TaskEntry compile(id, {TaskType::COMPILE, (int)CompileSubtask::USERPROG}, priority);
@@ -616,12 +651,12 @@ bool PushSubmission(Submission&& sub, size_t max_queue) {
   if (sub.specjudge_type == SpecjudgeType::SPECJUDGE_OLD ||
       sub.specjudge_type == SpecjudgeType::SPECJUDGE_NEW) {
     TaskEntry compile(id, {TaskType::COMPILE, (int)CompileSubtask::SPECJUDGE}, priority);
-    for (auto& i : scorings) Link(compile, i);
+    for (auto& i : scorings) Link(compile, i[0]);
     if (executes.empty()) Link(compile, finalize);
     InsertTaskList(std::move(compile));
   }
   for (auto& i : executes) for (auto& j : i) InsertTaskList(std::move(j));
-  for (auto& i : scorings) InsertTaskList(std::move(i));
+  for (auto& i : scorings) for (auto& j : i) InsertTaskList(std::move(j));
   InsertTaskList(std::move(finalize));
   submission_list.insert({id, std::move(sub)});
   if (auto it = submission_id_map.insert({sub.submission_id, id}); !it.second) {

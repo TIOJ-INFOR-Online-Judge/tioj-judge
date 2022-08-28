@@ -28,14 +28,14 @@ fs::path ExecuteBoxOutput(long id, int td, int stage, bool strict, bool inside_b
 fs::path ExecuteBoxError(long id, int td, int stage, bool inside_box = false);
 fs::path ExecuteBoxFinalOutput(long id, int td, int stage);
 // TODO FEATURE(pin)
-fs::path ScoringBoxPath(long id, int td);
-fs::path ScoringBoxProgram(long id, int td, Compiler lang, bool inside_box = false);
-fs::path ScoringBoxCode(long id, int td, Compiler lang, bool inside_box = false);
-fs::path ScoringBoxUserOutput(long id, int td, bool inside_box = false);
-fs::path ScoringBoxTdInput(long id, int td, bool inside_box = false);
-fs::path ScoringBoxTdOutput(long id, int td, bool inside_box = false);
-fs::path ScoringBoxMetaFile(long id, int td, bool inside_box = false);
-fs::path ScoringBoxOutput(long id, int td, bool inside_box = false);
+fs::path ScoringBoxPath(long id, int td, int stage);
+fs::path ScoringBoxProgram(long id, int td, int stage, Compiler lang, bool inside_box = false);
+fs::path ScoringBoxCode(long id, int td, int stage, Compiler lang, bool inside_box = false);
+fs::path ScoringBoxUserOutput(long id, int td, int stage, bool inside_box = false);
+fs::path ScoringBoxTdInput(long id, int td, int stage, bool inside_box = false);
+fs::path ScoringBoxTdOutput(long id, int td, int stage, bool inside_box = false);
+fs::path ScoringBoxMetaFile(long id, int td, int stage, bool inside_box = false);
+fs::path ScoringBoxOutput(long id, int td, int stage, bool inside_box = false);
 
 fs::path DefaultScoringPath();
 fs::path SpecjudgeHeadersPath();

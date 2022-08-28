@@ -5,6 +5,7 @@
 #include <filesystem>
 #include <nlohmann/json.hpp>
 
+
 bool LineCompare(std::ifstream& f_ans, std::ifstream& f_usr,
                  bool strip_tail = true, bool ignore_tail_empty_lines = true) {
   constexpr char kWhites[] = " \n\r\t";
@@ -109,7 +110,7 @@ int main(int argc, char** argv) {
         try {
           long double fans = std::stold(ans), fusr = std::stold(usr);
           // this avoids treating integers as floating point
-          if (ans.find_first_of(".eExXnN")) return func(fans, fusr);
+          if (ans.find_first_of(".eExXnN") != std::string::npos) return func(fans, fusr);
           return ans == usr;
         } catch (...) {
           return ans == usr;

@@ -27,7 +27,7 @@ TEST_P(ExampleProblemVerdict, Ver) {
   auto& param = GetParam();
   kMaxParallel = 2;
   SetUp(1, 2);
-  AssertVerdictReporter reporter(param.verdict);
+  AssertVerdictReporter reporter(param.verdict, (int)param.verdict < (int)Verdict::CE);
   sub.reporter = &reporter;
   Submission sub1 = sub, sub2 = sub;
   int id1 = SetupSubmission(sub1, param.sub_id+1, Compiler::GCC_CPP_17, kTime, true, param.code);

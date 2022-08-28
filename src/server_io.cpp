@@ -343,9 +343,13 @@ bool DealOneSubmission(nlohmann::json&& data) {
     auto& problem = data["problem"];
     sub.problem_id = problem["id"].get<int>();
     sub.sandbox_strict = problem["strict_mode"].get<bool>();
+    sub.stages = problem["num_stages"].get<int>();
     sub.specjudge_type = (SpecjudgeType)problem["specjudge_type"].get<int>();
-    if (sub.specjudge_type != SpecjudgeType::NORMAL) {
+    if (sub.specjudge_type == SpecjudgeType::NORMAL) {
+      sub.default_scoring_args = problem["default_scoring_args"].get<std::vector<std::string>>();
+    } else {
       sub.specjudge_lang = GetCompiler(problem["specjudge_compiler"].get<std::string>());
+      sub.judge_between_stages = problem["judge_between_stages"].get<bool>();
     }
     sub.interlib_type = (InterlibType)problem["interlib_type"].get<int>();
     if (sub.specjudge_type != SpecjudgeType::NORMAL) {

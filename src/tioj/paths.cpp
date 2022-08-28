@@ -165,29 +165,29 @@ fs::path ExecuteBoxFinalOutput(long id, int td, int stage)  {
   return ExecuteBoxPath(id, td, stage) / "output";
 }
 
-fs::path ScoringBoxPath(long id, int td) {
-  return SubmissionRunPath(id) / ("scoring" + PadInt(td, 3));
+fs::path ScoringBoxPath(long id, int td, int stage) {
+  return SubmissionRunPath(id) / ("scoring" + PadInt(td, 3) + "_" + PadInt(stage, 2));
 }
-fs::path ScoringBoxProgram(long id, int td, Compiler lang, bool inside_box) {
-  return Workdir(BoxRoot(ScoringBoxPath(id, td), inside_box)) / ("prog" + std::string(ProgramExtension(lang)));
+fs::path ScoringBoxProgram(long id, int td, int stage, Compiler lang, bool inside_box) {
+  return Workdir(BoxRoot(ScoringBoxPath(id, td, stage), inside_box)) / ("prog" + std::string(ProgramExtension(lang)));
 }
-fs::path ScoringBoxCode(long id, int td, Compiler lang, bool inside_box) {
-  return Workdir(BoxRoot(ScoringBoxPath(id, td), inside_box)) / ("code" + std::string(CodeExtension(lang)));
+fs::path ScoringBoxCode(long id, int td, int stage, Compiler lang, bool inside_box) {
+  return Workdir(BoxRoot(ScoringBoxPath(id, td, stage), inside_box)) / ("code" + std::string(CodeExtension(lang)));
 }
-fs::path ScoringBoxUserOutput(long id, int td, bool inside_box) {
-  return Workdir(BoxRoot(ScoringBoxPath(id, td), inside_box)) / "user_output";
+fs::path ScoringBoxUserOutput(long id, int td, int stage, bool inside_box) {
+  return Workdir(BoxRoot(ScoringBoxPath(id, td, stage), inside_box)) / "user_output";
 }
-fs::path ScoringBoxTdInput(long id, int td, bool inside_box) {
-  return Workdir(BoxRoot(ScoringBoxPath(id, td), inside_box)) / "td_input";
+fs::path ScoringBoxTdInput(long id, int td, int stage, bool inside_box) {
+  return Workdir(BoxRoot(ScoringBoxPath(id, td, stage), inside_box)) / "td_input";
 }
-fs::path ScoringBoxTdOutput(long id, int td, bool inside_box) {
-  return Workdir(BoxRoot(ScoringBoxPath(id, td), inside_box)) / "td_output";
+fs::path ScoringBoxTdOutput(long id, int td, int stage, bool inside_box) {
+  return Workdir(BoxRoot(ScoringBoxPath(id, td, stage), inside_box)) / "td_output";
 }
-fs::path ScoringBoxMetaFile(long id, int td, bool inside_box) {
-  return Workdir(BoxRoot(ScoringBoxPath(id, td), inside_box)) / "meta";
+fs::path ScoringBoxMetaFile(long id, int td, int stage, bool inside_box) {
+  return Workdir(BoxRoot(ScoringBoxPath(id, td, stage), inside_box)) / "meta";
 }
-fs::path ScoringBoxOutput(long id, int td, bool inside_box) {
-  return Workdir(BoxRoot(ScoringBoxPath(id, td), inside_box)) / "output";
+fs::path ScoringBoxOutput(long id, int td, int stage, bool inside_box) {
+  return Workdir(BoxRoot(ScoringBoxPath(id, td, stage), inside_box)) / "output";
 }
 
 std::mutex& TdFileLock::operator[](int id) {
@@ -201,9 +201,6 @@ fs::path TdRoot() {
 }
 fs::path TdPath(int prob) {
   return TdRoot() / PadInt(prob, 4);
-}
-fs::path TdMeta(int prob, int td) {
-  return TdPath(prob) / ("input" + PadInt(td, 3) + ".meta");
 }
 fs::path TdInput(int prob, int td) {
   return TdPath(prob) / ("input" + PadInt(td, 3));

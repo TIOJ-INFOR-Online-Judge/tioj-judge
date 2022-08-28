@@ -19,7 +19,7 @@ extern double kTimeMultiplier;
   X(NORMAL) \
   X(SPECJUDGE_OLD) \
   X(SPECJUDGE_NEW) \
-  X(SKIP)
+  X(SKIP) // should be the last one
 enum class SpecjudgeType {
 #define X(name) name,
   ENUM_SPECJUDGE_TYPE_
@@ -94,6 +94,7 @@ class Submission {
   InterlibType interlib_type;
   Compiler specjudge_lang;
   int stages;
+  bool judge_between_stages;
   bool sandbox_strict; // false for backward-compatability
   std::vector<std::string> default_scoring_args;
   // task information
@@ -106,6 +107,7 @@ class Submission {
   std::vector<TestdataLimit> td_limits;
   // TODO FEATURE(group): testdata group
   // TODO FEATURE(group): bool skip_group
+
   // task result
   struct TestdataResult {
     struct cjail_result execute_result;
@@ -114,7 +116,10 @@ class Submission {
     int64_t score; // 10^(-6)
     Verdict verdict;
     std::string message_type, message;
-    TestdataResult() : execute_result{}, vss{}, rss{}, time{}, score{}, verdict(Verdict::NUL) {}
+    bool skip_stage;
+    TestdataResult() :
+        execute_result{}, vss{}, rss{}, time{}, score{}, verdict(Verdict::NUL),
+        skip_stage(false) {}
   };
   std::vector<TestdataResult> td_results;
   // overall result
@@ -125,19 +130,23 @@ class Submission {
   bool remove_submission; // remove submission code after judge
 
   Submission() :
-      submission_id(0), contest_id(0), submission_time(0), submitter_id(0),
+      submission_id(0),
+      contest_id(0),
+      submission_time(0),
+      submitter_id(0),
       lang(Compiler::GCC_CPP_17),
       problem_id(0),
       specjudge_type(SpecjudgeType::NORMAL),
       interlib_type(InterlibType::NONE),
       specjudge_lang(Compiler::GCC_CPP_17),
       stages(1),
+      judge_between_stages(false),
       sandbox_strict(false),
       verdict(Verdict::NUL),
       reporter(nullptr),
       remove_submission(true) {}
 
-  nlohmann::json TestdataMeta(int subtask) const;
+  nlohmann::json TestdataMeta(int subtask, int stage) const;
 };
 
 // Call from main thread

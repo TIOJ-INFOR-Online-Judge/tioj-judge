@@ -14,7 +14,7 @@
 - [x] Linear time calibration
 - [x] Different comparison methods
 - [x] Additional message
-- [ ] Optionally invoke special judge between stages in multistage
+- [x] Optionally invoke special judge between stages in multistage
 
 ## Future
 

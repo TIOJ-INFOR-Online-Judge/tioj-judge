@@ -144,10 +144,12 @@ struct cjail_result RunExecute(const Submission& sub, const Task& task, int uid)
   if (stage > 0) {
     lim_time -= sub.td_results[subtask].time;
   }
+  if (lim_time < 0) lim_time = 0;
   opt.wall_time = std::max(long(lim_time * 1.2), lim_time + 1'000'000);
   opt.cpu_time = lim_time + 50'000; // a little bit of margin just in case
   opt.wall_time /= kTimeMultiplier;
   opt.cpu_time /= kTimeMultiplier;
+  if (opt.cpu_time <= 0) opt.cpu_time = 1; // avoid being regarded as no limit
   opt.rss = lim.rss + 1024;
   if (opt.rss == 0 || opt.rss > kMaxRSS) opt.rss = kMaxRSS;
   opt.vss = lim.vss ? lim.vss + 2048 : 0; // add some margin so we can determine whether it is MLE
@@ -195,28 +197,30 @@ struct cjail_result RunExecute(const Submission& sub, const Task& task, int uid)
 struct cjail_result RunScoring(const Submission& sub, const Task& task, int uid) {
   long id = sub.submission_internal_id;
   int subtask = task.subtask;
+  int stage = task.stage;
   spdlog::debug("Generating scoring settings: id={} subid={}, subtask={}", id, sub.submission_id, task.subtask);
-  std::string program = ScoringBoxProgram(-1, -1, sub.specjudge_lang, true);
+  std::string program = ScoringBoxProgram(-1, -1, -1, sub.specjudge_lang, true);
 
   SandboxOptions opt;
-  opt.boxdir = ScoringBoxPath(id, subtask);
+  opt.boxdir = ScoringBoxPath(id, subtask, stage);
   opt.command = ExecuteCommand(sub.specjudge_lang, program);
   if (sub.specjudge_type == SpecjudgeType::SPECJUDGE_OLD) {
     opt.command.insert(opt.command.end(), {
-      ScoringBoxUserOutput(-1, -1, true),
-      ScoringBoxTdInput(-1, -1, true),
-      ScoringBoxTdOutput(-1, -1, true),
+      ScoringBoxUserOutput(-1, -1, -1, true),
+      ScoringBoxTdInput(-1, -1, -1, true),
+      ScoringBoxTdOutput(-1, -1, -1, true),
       CompilerName(sub.lang),
-      ScoringBoxCode(-1, -1, sub.lang, true),
+      ScoringBoxCode(-1, -1, -1, sub.lang, true),
+      std::to_string(stage),
     });
   } else {
-    opt.command.push_back(ScoringBoxMetaFile(-1, -1, true));
+    opt.command.push_back(ScoringBoxMetaFile(-1, -1, -1, true));
     if (sub.specjudge_type == SpecjudgeType::NORMAL) {
       opt.command.insert(opt.command.end(), sub.default_scoring_args.begin(), sub.default_scoring_args.end());
     }
   }
   opt.workdir = Workdir("/");
-  opt.output = ScoringBoxOutput(-1, -1, true);
+  opt.output = ScoringBoxOutput(-1, -1, -1, true);
   opt.error = "/dev/null";
   opt.uid = opt.gid = uid;
   opt.wall_time = 60L * 1'000'000;
