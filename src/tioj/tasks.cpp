@@ -26,6 +26,7 @@ std::vector<std::string> GccCompileCommand(
     case Compiler::GCC_C_90: prog = "gcc", std = "-ansi"; break;
     case Compiler::GCC_C_99: prog = "gcc", std = "-std=c99"; break;
     case Compiler::GCC_C_11: prog = "gcc", std = "-std=c11"; break;
+    case Compiler::GCC_C_17: prog = "gcc", std = "-std=c17"; break;
     default: __builtin_unreachable();
   }
   std::vector<std::string> ret = {"/usr/bin/env", prog, std, "-O2", "-w"};
@@ -46,6 +47,7 @@ std::vector<std::string> ExecuteCommand(Compiler lang, const std::string& progra
     case Compiler::GCC_C_90: [[fallthrough]];
     case Compiler::GCC_C_99: [[fallthrough]];
     case Compiler::GCC_C_11: [[fallthrough]];
+    case Compiler::GCC_C_17: [[fallthrough]];
     case Compiler::HASKELL: return {program};
     case Compiler::PYTHON2: return {"/usr/bin/env", "python2", program};
     case Compiler::PYTHON3: return {"/usr/bin/env", "python3", program};
@@ -88,7 +90,8 @@ struct cjail_result RunCompile(const Submission& sub, const Task& task, int uid)
     case Compiler::GCC_CPP_20: [[fallthrough]];
     case Compiler::GCC_C_90: [[fallthrough]];
     case Compiler::GCC_C_99: [[fallthrough]];
-    case Compiler::GCC_C_11:
+    case Compiler::GCC_C_11: [[fallthrough]];
+    case Compiler::GCC_C_17:
       opt.command = GccCompileCommand(lang, input, interlib, output, sub.sandbox_strict); break;
     case Compiler::HASKELL: {
       opt.command = {"/usr/bin/env", "ghc", "-w", "-O", "-tmpdir", ".", "-o", output, input};

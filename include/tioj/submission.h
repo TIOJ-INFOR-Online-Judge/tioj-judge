@@ -44,6 +44,7 @@ enum class InterlibType {
   X(GCC_C_90, "c90") \
   X(GCC_C_99, "c99") \
   X(GCC_C_11, "c11") \
+  X(GCC_C_17, "c17") \
   X(HASKELL, "haskell") \
   X(PYTHON2, "python2") \
   X(PYTHON3, "python3")
