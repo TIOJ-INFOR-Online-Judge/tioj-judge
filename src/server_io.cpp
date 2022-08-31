@@ -258,7 +258,7 @@ class ServerReporter : public Reporter {
     SendFinalResult(sub);
   }
   void ReportScoringResult(const Submission& sub, int subtask) override {
-    SendResult(sub);
+    SendResult(sub, subtask);
   }
   void ReportCEMessage(const Submission&) override {
     // do nothing; ReportOverallResult will send the message anyways
@@ -475,27 +475,35 @@ bool DealOneSubmission(nlohmann::json&& data) {
   return true;
 }
 
-nlohmann::json TdResultsJSON(const Submission& sub) {
+nlohmann::json OneTdJSON(const Submission::TestdataResult& nowtd, int position) {
+  nlohmann::json tddata{
+      {"position", position},
+      {"verdict", VerdictToAbr(nowtd.verdict)},
+      {"time", nowtd.time},
+      {"rss", nowtd.rss},
+      {"score", nowtd.score}};
+  if (nowtd.vss == 0) {
+    tddata["vss"] = nullptr;
+  } else {
+    tddata["vss"] = nowtd.vss;
+  }
+  if (!nowtd.message.empty()) {
+    tddata["message_type"] = nowtd.message_type;
+    tddata["message"] = nowtd.message;
+  }
+  return tddata;
+}
+
+nlohmann::json TdResultsJSON(const Submission& sub, int subtask = -1) {
   nlohmann::json tds = nlohmann::json::array();
-  for (size_t i = 0; i < sub.td_results.size(); i++) {
-    auto& nowtd = sub.td_results[i];
-    if (nowtd.verdict == Verdict::NUL) continue;
-    nlohmann::json tddata{
-        {"position", i},
-        {"verdict", VerdictToAbr(nowtd.verdict)},
-        {"time", nowtd.time},
-        {"rss", nowtd.rss},
-        {"score", nowtd.score}};
-    if (nowtd.vss == 0) {
-      tddata["vss"] = nullptr;
-    } else {
-      tddata["vss"] = nowtd.vss;
+  if (subtask == -1) {
+    for (size_t i = 0; i < sub.td_results.size(); i++) {
+      auto& nowtd = sub.td_results[i];
+      if (nowtd.verdict == Verdict::NUL) continue;
+      tds.push_back(OneTdJSON(nowtd, i));
     }
-    if (!nowtd.message.empty()) {
-      tddata["message_type"] = nowtd.message_type;
-      tddata["message"] = nowtd.message;
-    }
-    tds.push_back(std::move(tddata));
+  } else {
+    tds.push_back(OneTdJSON(sub.td_results[subtask], subtask));
   }
   return tds;
 }
@@ -510,13 +518,11 @@ void TryFetchSubmission() {
   PushRequest(std::move(req));
 }
 
-void SendResult(const Submission& sub) {
+void SendResult(const Submission& sub, int subtask) {
   nlohmann::json data;
   data["submission_id"] = sub.submission_id;
-  data["results"] = TdResultsJSON(sub);
+  data["results"] = TdResultsJSON(sub, subtask);
   Request req{};
-  req.is_unique = true;
-  req.key = sub.submission_id;
   req.action = "td_result";
   req.body = std::move(data);
   PushRequest(std::move(req));
@@ -530,8 +536,6 @@ void SendFinalResult(const Submission& sub) {
     data["td_results"] = TdResultsJSON(sub);
   }
   Request req{};
-  req.force_pop = true;
-  req.key = sub.submission_id;
   req.action = "submission_result";
   req.body = std::move(data);
   PushRequest(std::move(req));

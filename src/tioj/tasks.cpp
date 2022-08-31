@@ -154,7 +154,7 @@ struct cjail_result RunExecute(const Submission& sub, const Task& task, int uid)
   opt.cpu_time /= kTimeMultiplier;
   if (opt.cpu_time <= 0) opt.cpu_time = 1; // avoid being regarded as no limit
   opt.rss = lim.rss + 1024;
-  if (opt.rss == 0 || opt.rss > kMaxRSS) opt.rss = kMaxRSS;
+  if (lim.rss == 0 || opt.rss > kMaxRSS) opt.rss = kMaxRSS;
   opt.vss = lim.vss ? lim.vss + 2048 : 0; // add some margin so we can determine whether it is MLE
   opt.proc_num = 1;
   // file limit is not needed since we have already limited the total size by mounting tmpfs
