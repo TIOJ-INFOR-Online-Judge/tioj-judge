@@ -53,17 +53,17 @@ nlohmann::json Submission::TestdataMeta(int subtask, int stage) const {
     {"message", td_result.message},
     {"limits", {
       {"time_us", lim.time},
-      {"vss_kb", lim.vss},
-      {"rss_kb", lim.rss},
-      {"output_kb", lim.output},
+      {"vss_kib", lim.vss},
+      {"rss_kib", lim.rss},
+      {"output_kib", lim.output},
     }},
     {"stats", {
       {"exit_code", res.info.si_status},
       {"real_us", ToUs(res.time)},
       {"user_us", ToUs(res.rus.ru_utime)},
       {"sys_us", ToUs(res.rus.ru_stime)},
-      {"max_rss_kb", res.rus.ru_maxrss},
-      {"max_vss_kb", res.stats.hiwater_vm},
+      {"max_rss_kib", res.rus.ru_maxrss},
+      {"max_vss_kib", res.stats.hiwater_vm},
     }},
   };
 }
@@ -399,7 +399,8 @@ void FinalizeScoring(Submission& sub, const TaskEntry& task, const struct cjail_
   //          continue otherwise
   td_result.score = 0;
   if (!fs::is_regular_file(output_path) || res.info.si_status != 0) {
-    // WA or continue
+    // skip remaining stages
+    if (td_result.verdict == Verdict::NUL) td_result.verdict = Verdict::WA;
   } else if (sub.specjudge_type == SpecjudgeType::SPECJUDGE_OLD) {
     int x = 1;
     std::ifstream fin(output_path);
@@ -458,7 +459,7 @@ void FinalizeScoring(Submission& sub, const TaskEntry& task, const struct cjail_
         try {
           auto& msg_type = it_type->get_ref<std::string&>();
           if (msg_type == "text" || msg_type == "html") {
-            constexpr size_t kMaxLen = 16384;
+            constexpr size_t kMaxLen = 32768;
             td_result.message_type = std::move(msg_type);
             td_result.message = std::move(it_msg->get_ref<std::string&>());
             if (td_result.message.size() > kMaxLen) td_result.message.resize(kMaxLen);
