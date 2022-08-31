@@ -451,6 +451,7 @@ void FinalizeScoring(Submission& sub, const TaskEntry& task, const struct cjail_
           td_result.rss = it->get<long>();
         } catch (...) {}
       }
+      bool has_message = false;
       if (auto it_type = json.find("message_type"), it_msg = json.find("message");
           it_type != json.end() && it_msg != json.end() &&
           it_type->is_string() && it_msg->is_string()) {
@@ -461,9 +462,11 @@ void FinalizeScoring(Submission& sub, const TaskEntry& task, const struct cjail_
             td_result.message_type = std::move(msg_type);
             td_result.message = std::move(it_msg->get_ref<std::string&>());
             if (td_result.message.size() > kMaxLen) td_result.message.resize(kMaxLen);
+            has_message = true;
           }
         } catch (...) {}
       }
+      if (!has_message) td_result.message_type = td_result.message = "";
     } catch (nlohmann::json::exception&) {
       // WA
     }
