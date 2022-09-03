@@ -49,6 +49,7 @@ nlohmann::json Submission::TestdataMeta(int subtask, int stage) const {
     {"testdata_index", subtask},
     {"current_stage", stage},
     {"original_verdict", VerdictToAbr(td_result.verdict)},
+    {"current_time_us", td_result.time},
     {"message_type", td_result.message_type},
     {"message", td_result.message},
     {"limits", {
@@ -435,7 +436,7 @@ void FinalizeScoring(Submission& sub, const TaskEntry& task, const struct cjail_
         } catch (...) {}
         if (score > 1e+6) score = 1e+6;
         if (score < -1e+6) score = -1e+6;
-        td_result.score = (score * 1'000'000) + 0.5;
+        td_result.score = std::lround(score * 1'000'000);
       }
       if (auto it = json.find("time_us"); it != json.end() && it->is_number()) {
         try {
