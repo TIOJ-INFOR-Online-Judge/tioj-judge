@@ -138,7 +138,6 @@ inline void Remove(const TaskEntry& task) {
 
 /// Task env setup
 bool SetupCompile(const Submission& sub, const TaskEntry& task) {
-  if (sub.reporter) sub.reporter->ReportStartCompiling(sub);
   long id = sub.submission_internal_id;
   CompileSubtask subtask = (CompileSubtask)task.task.subtask;
   if (cancelled_list.count(id)) return false; // cancellation check
@@ -146,6 +145,7 @@ bool SetupCompile(const Submission& sub, const TaskEntry& task) {
   CreateDirs(Workdir(CompileBoxPath(id, subtask)), fs::perms::all);
   switch (subtask) {
     case CompileSubtask::USERPROG: {
+      if (sub.reporter) sub.reporter->ReportStartCompiling(sub);
       Copy(SubmissionUserCode(id), CompileBoxInput(id, subtask, sub.lang), kPerm666);
       switch (sub.interlib_type) {
         case InterlibType::NONE: break;
