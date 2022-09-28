@@ -125,7 +125,7 @@ class Submission {
   std::vector<TestdataResult> td_results;
   // overall result
   Verdict verdict;
-  std::string ce_message;
+  std::string ce_message, er_message;
   // judge behavior
   Reporter* reporter; // callbacks for result reporting
   bool remove_submission; // remove submission code after judge

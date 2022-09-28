@@ -194,33 +194,35 @@ void FinalizeCompile(Submission& sub, const TaskEntry& task, const struct cjail_
     }
     spdlog::info("Compilation failed: id={} subtask={} verdict={}",
                  id, CompileSubtaskName(subtask), VerdictToAbr(sub.verdict));
-    if (subtask == CompileSubtask::USERPROG) {
-      fs::path path = CompileBoxMessage(id, subtask);
-      if (fs::is_regular_file(path)) {
-        char buf[kMaxMsgLen + 1];
-        std::ifstream fin(path);
-        fin.read(buf, sizeof(buf));
-        sub.ce_message.assign(buf, fin.gcount());
-        spdlog::debug("Message: {}", sub.ce_message);
-        bool truncated = sub.ce_message.size() > kMaxMsgLen;
-        if (truncated) {
-          sub.ce_message.resize(kMaxMsgLen);
-        }
-        sub.ce_message = std::regex_replace(sub.ce_message, kFilterRegex, kFilterReplace);
-        if (truncated) {
-          sub.ce_message += "\n[Error message truncated after " +
-              std::to_string(kMaxMsgLen) + " bytes]";
-        }
+
+    fs::path path = CompileBoxMessage(id, subtask);
+    std::string message;
+    if (fs::is_regular_file(path)) {
+      char buf[kMaxMsgLen + 1];
+      std::ifstream fin(path);
+      fin.read(buf, sizeof(buf));
+      message.assign(buf, fin.gcount());
+      spdlog::debug("Message: {}", message);
+      bool truncated = message.size() > kMaxMsgLen;
+      if (truncated) {
+        message.resize(kMaxMsgLen);
       }
-      if (sub.reporter) sub.reporter->ReportCEMessage(sub);
-    } else if (spdlog::get_level() == spdlog::level::debug) {
-      fs::path path = CompileBoxMessage(id, subtask);
-      if (fs::is_regular_file(path)) {
-        char buf[4096];
-        std::ifstream fin(path);
-        fin.read(buf, sizeof(buf));
-        std::string str(buf, fin.gcount());
-        spdlog::debug("Message: {}", str);
+      message = std::regex_replace(message, kFilterRegex, kFilterReplace);
+      if (truncated) {
+        message += "\n[Error message truncated after " +
+            std::to_string(kMaxMsgLen) + " bytes]";
+      }
+    }
+    switch (subtask) {
+      case CompileSubtask::USERPROG: {
+        sub.ce_message = std::move(message);
+        if (sub.reporter) sub.reporter->ReportCEMessage(sub);
+        break;
+      }
+      case CompileSubtask::SPECJUDGE: {
+        sub.er_message = std::move(message);
+        if (sub.reporter) sub.reporter->ReportERMessage(sub);
+        break;
       }
     }
   } else {

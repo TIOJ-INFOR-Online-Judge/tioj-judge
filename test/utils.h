@@ -34,6 +34,7 @@ class AssertVerdictReporter : public Reporter {
     has_scoring_result_ = true;
   }
   void ReportCEMessage(const Submission&) {}
+  void ReportERMessage(const Submission&) {}
   void ReportFinalized(const Submission&, size_t) {}
 };
 

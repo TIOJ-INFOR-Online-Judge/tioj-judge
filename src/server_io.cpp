@@ -261,8 +261,11 @@ class ServerReporter : public Reporter {
     SendResult(sub, subtask);
   }
   void ReportCEMessage(const Submission&) override {
-    // do nothing; ReportOverallResult will send the message anyways
+    // do nothing; ReportOverallResult will send the message
+    // we do this because it is possible that a submission get both CE and ER message,
+    //  so it is better to send it after completion
   }
+  void ReportERMessage(const Submission&) override {}
   void ReportFinalized(const Submission&, size_t queue_size_before_pop) override {
     if (queue_size_before_pop == kMaxQueue) TryFetchSubmission();
   }
@@ -532,10 +535,14 @@ void SendFinalResult(const Submission& sub) {
   nlohmann::json data{{"submission_id", sub.submission_id}, {"verdict", VerdictToAbr(sub.verdict)}};
   if (sub.verdict == Verdict::CE || sub.verdict == Verdict::CLE) {
     data["message"] = sub.ce_message;
+  } else if (sub.verdict == Verdict::ER) {
+    data["message"] = sub.er_message;
   } else {
     data["td_results"] = TdResultsJSON(sub);
   }
   Request req{};
+  req.force_pop = true;
+  req.key = sub.submission_id;
   req.action = "submission_result";
   req.body = std::move(data);
   PushRequest(std::move(req));
@@ -544,8 +551,6 @@ void SendFinalResult(const Submission& sub) {
 void SendStatus(int submission_id, const std::string& status) {
   nlohmann::json data{{"submission_id", submission_id}, {"verdict", status}};
   Request req{};
-  req.force_pop = true;
-  req.key = submission_id;
   req.action = "submission_result";
   req.body = std::move(data);
   PushRequest(std::move(req));
