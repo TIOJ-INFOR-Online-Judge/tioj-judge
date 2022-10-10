@@ -68,12 +68,10 @@ A minimal working C++ example:
 
 // Callbacks for judge results
 class MyReporter : public Reporter {
-  void ReportStartCompiling(const Submission& sub) override {}
   void ReportOverallResult(const Submission& sub) override {
     printf("Result: %s\n", VerdictToAbr(sub.verdict));
   }
-  void ReportScoringResult(const Submission& sub, int subtask) override {}
-  void ReportCEMessage(const Submission& sub) {
+  void ReportCEMessage(const Submission& sub) override {
     puts("CE message:");
     printf("%s\n", sub.ce_message.c_str());
   }
