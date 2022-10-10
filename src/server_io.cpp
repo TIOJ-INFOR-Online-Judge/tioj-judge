@@ -49,7 +49,7 @@ inline double MonotonicTimestamp() {
 Database db;
 
 /// --- websocket client ---
-constexpr double kUniqueReqMinInterval = 0.6;
+constexpr double kUniqueReqMinInterval = 0.5;
 
 // outgoing requests
 struct Request {
@@ -85,6 +85,10 @@ void PushRequest(Request&& req) {
     if (req.is_unique) {
       if (auto it = unique_requests.find(req.key); it != unique_requests.end()) {
         // a request of same id waiting; replace
+        if (auto results = req.body.find("results"); results != req.body.end()) {
+          // this is a testdata result request; merge it
+          for (auto& i : it->second.body["results"]) results->push_back(std::move(i));
+        }
         it->second = std::move(req);
       } else if (auto it = unique_timestamp_map.find(req.key); it != unique_timestamp_map.end()) {
         // no request of same id waiting but one is sent previously; insert it
@@ -526,6 +530,8 @@ void SendResult(const Submission& sub, int subtask) {
   data["submission_id"] = sub.submission_id;
   data["results"] = TdResultsJSON(sub, subtask);
   Request req{};
+  req.is_unique = true;
+  req.key = sub.submission_id;
   req.action = "td_result";
   req.body = std::move(data);
   PushRequest(std::move(req));
@@ -551,6 +557,8 @@ void SendFinalResult(const Submission& sub) {
 void SendStatus(int submission_id, const std::string& status) {
   nlohmann::json data{{"submission_id", submission_id}, {"verdict", status}};
   Request req{};
+  req.force_pop = true;
+  req.key = submission_id;
   req.action = "submission_result";
   req.body = std::move(data);
   PushRequest(std::move(req));
