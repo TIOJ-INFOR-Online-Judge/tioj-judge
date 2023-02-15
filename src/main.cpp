@@ -28,6 +28,7 @@ bool ParseConfig(const fs::path& conf_path) {
   if (submission_root.size()) kSubmissionRoot = submission_root;
   // if (data_dir.size()) kDataDir = data_dir;
   kMaxParallel = ini[""]["parallel"] | kMaxParallel;
+  kPinnedCpus = ini[""]["pinned_cpus"] | kPinnedCpus;
   kMaxRSS = (ini[""]["max_rss_per_task_mb"] | (kMaxRSS / 1024)) * 1024;
   kMaxOutput = (ini[""]["max_output_per_task_mb"] | (kMaxRSS / 1024)) * 1024;
   kMaxQueue = ini[""]["max_submission_queue_size"] | kMaxQueue;
@@ -57,6 +58,9 @@ void ParseArgs(int argc, char** argv) {
     .default_value(false)
     .implicit_value(true)
     .help("Not check for other running instances");
+  parser.add_argument("--pinned-cpus")
+    .default_value(std::string(""))
+    .help("Comma-separated list of CPUs to pin or simply \"all\"");
 
   try {
     parser.parse_args(argc, argv);
@@ -83,6 +87,9 @@ void ParseArgs(int argc, char** argv) {
     kTimeMultiplier = val.value();
   }
   to_lock = parser["--no-lock"] == false;
+  if (auto pinned_cpus = parser.get<std::string>("--pinned-cpus"); pinned_cpus.size()) {
+    kPinnedCpus = pinned_cpus;
+  }
 }
 
 bool LockFile() {

@@ -3,7 +3,9 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <unistd.h>
+#include <sys/sysinfo.h>
 #include <sys/wait.h>
+#include <numeric>
 #include <map>
 #include <unordered_map>
 
@@ -58,7 +60,7 @@ std::vector<std::string> ExecuteCommand(Compiler lang, const std::string& progra
 /// child
 // Invoke sandbox with correct settings
 // Results will be parsed in testsuite.cpp
-struct cjail_result RunCompile(const Submission& sub, const Task& task, int uid) {
+struct cjail_result RunCompile(const Submission& sub, const Task& task, int uid, int cpuid) {
   long id = sub.submission_internal_id;
   CompileSubtask subtask = (CompileSubtask)task.subtask;
   spdlog::debug("Generating compile settings: id={} subid={}, subtask={}",
@@ -115,6 +117,7 @@ struct cjail_result RunCompile(const Submission& sub, const Task& task, int uid)
   opt.workdir = Workdir("/");
   opt.fd_output = open(CompileBoxMessage(id, subtask).c_str(), O_WRONLY | O_APPEND | O_CREAT, 0666);
   opt.fd_error = opt.fd_output;
+  if (cpuid != -1) opt.cpu_set.push_back(cpuid);
   opt.uid = opt.gid = uid;
   opt.wall_time = 60L * 1'000'000;
   opt.wall_time /= kTimeMultiplier;
@@ -128,7 +131,7 @@ struct cjail_result RunCompile(const Submission& sub, const Task& task, int uid)
 }
 
 // TODO FEATURE(io-interactive): fork & run multiple cjails and merge them into one cjail_result
-struct cjail_result RunExecute(const Submission& sub, const Task& task, int uid) {
+struct cjail_result RunExecute(const Submission& sub, const Task& task, int uid, int cpuid) {
   long id = sub.submission_internal_id;
   int subtask = task.subtask;
   int stage = task.stage;
@@ -142,6 +145,7 @@ struct cjail_result RunExecute(const Submission& sub, const Task& task, int uid)
   opt.command = ExecuteCommand(sub.lang, program);
   if (sub.stages > 1) opt.command.push_back(std::to_string(stage));
   opt.workdir = Workdir("/");
+  if (cpuid != -1) opt.cpu_set.push_back(cpuid);
   opt.uid = opt.gid = uid;
   long lim_time = lim.time;
   if (stage > 0) {
@@ -197,7 +201,7 @@ struct cjail_result RunExecute(const Submission& sub, const Task& task, int uid)
   return ret;
 }
 
-struct cjail_result RunScoring(const Submission& sub, const Task& task, int uid) {
+struct cjail_result RunScoring(const Submission& sub, const Task& task, int uid, int cpuid) {
   long id = sub.submission_internal_id;
   int subtask = task.subtask;
   int stage = task.stage;
@@ -225,6 +229,7 @@ struct cjail_result RunScoring(const Submission& sub, const Task& task, int uid)
   opt.workdir = Workdir("/");
   opt.output = ScoringBoxOutput(-1, -1, -1, true);
   opt.error = "/dev/null";
+  if (cpuid != -1) opt.cpu_set.push_back(cpuid);
   opt.uid = opt.gid = uid;
   opt.wall_time = 60L * 1'000'000;
   opt.wall_time /= kTimeMultiplier;
@@ -238,15 +243,41 @@ struct cjail_result RunScoring(const Submission& sub, const Task& task, int uid)
 
 /// parent
 constexpr int kUidBase = 50000, kUidPoolSize = 100;
-std::vector<int> uid_pool;
+std::vector<int> uid_pool, cpuid_pool;
 bool pool_init = false;
 
 fd_set running_fdset;
-std::map<int, std::pair<int, int>> running; // fd -> (pid, uid)
+std::map<int, std::tuple<int, int, int>> running; // fd -> (pid, uid, cpuid)
 std::unordered_map<int, struct cjail_result> finished; // fd -> result
 
-void InitPool() {
+void InitCpuidPool() {
+  if (kPinnedCpus.empty()) {
+    cpuid_pool.push_back(-1);
+  } else if (kPinnedCpus == "all") {
+    cpuid_pool.resize(get_nprocs());
+    std::iota(cpuid_pool.begin(), cpuid_pool.end(), 0);
+  } else {
+    int cpuid = -1;
+    for (auto c : kPinnedCpus) {
+      if (std::isdigit(c)) {
+        if (cpuid == -1)
+          cpuid = 0;
+         cpuid = cpuid * 10 + c - '0';
+      } else if (c == ',' or std::isspace(c)) {
+        if (cpuid != -1) {
+          cpuid_pool.push_back(cpuid);
+          cpuid = -1;
+        }
+      } else {
+        spdlog::error("Unknown character '{}' in pinned_cpus", c);
+      }
+    }
+  }
+}
+
+void InitPools() {
   for (int i = 0; i < kUidPoolSize; i++) uid_pool.push_back(i + kUidBase);
+  InitCpuidPool();
   FD_ZERO(&running_fdset);
   pool_init = true;
 }
@@ -263,8 +294,10 @@ bool Wait() {
     struct cjail_result res = {};
     IGNORE_RETURN(read(i.first, &res, sizeof(struct cjail_result)));
     // we don't close(i.first) here, because it will release the handle and make it clash
-    waitpid(i.second.first, nullptr, 0);
-    uid_pool.push_back(i.second.second);
+    waitpid(std::get<0>(i.second), nullptr, 0);
+    uid_pool.push_back(std::get<1>(i.second));
+    if (int cpuid = std::get<2>(i.second); cpuid != -1)
+      cpuid_pool.push_back(cpuid);
     finished[i.first] = res;
     to_remove.push_back(i.first);
   }
@@ -279,14 +312,19 @@ bool Wait() {
 
 int RunTask(const Submission& sub, const Task& task) {
   if (task.type == TaskType::FINALIZE) return -1;
-  if (!pool_init) InitPool();
+  if (!pool_init) InitPools();
   int pipefd[2];
   if (pipe(pipefd) < 0) return -1;
   int uid = uid_pool.back();
   uid_pool.pop_back();
+  if (cpuid_pool.empty()) spdlog::critical("No available cpu");
+  int cpuid = cpuid_pool.back();
+  cpuid_pool.pop_back();
+  if (cpuid == -1) cpuid_pool.push_back(-1);
   pid_t pid = fork();
   if (pid < 0) {
     uid_pool.push_back(uid);
+    if (cpuid != -1) cpuid_pool.push_back(cpuid);
     close(pipefd[0]);
     close(pipefd[1]);
     return pid; // error
@@ -295,19 +333,19 @@ int RunTask(const Submission& sub, const Task& task) {
     close(pipefd[0]);
     struct cjail_result ret;
     switch (task.type) {
-      case TaskType::COMPILE: ret = RunCompile(sub, task, uid); break;
-      case TaskType::EXECUTE: ret = RunExecute(sub, task, uid); break;
-      case TaskType::SCORING: ret = RunScoring(sub, task, uid); break;
+      case TaskType::COMPILE: ret = RunCompile(sub, task, uid, cpuid); break;
+      case TaskType::EXECUTE: ret = RunExecute(sub, task, uid, cpuid); break;
+      case TaskType::SCORING: ret = RunScoring(sub, task, uid, cpuid); break;
       case TaskType::FINALIZE: __builtin_unreachable();
     }
     IGNORE_RETURN(write(pipefd[1], &ret, sizeof(struct cjail_result)));
     _exit(0); // since forked, some atexit() may hang by deadlocks
   }
   close(pipefd[1]);
-  running[pipefd[0]] = {pid, uid};
+  running[pipefd[0]] = {pid, uid, cpuid};
   FD_SET(pipefd[0], &running_fdset);
-  spdlog::debug("Task type={} subtask={} of {} started, handle={} pid={} uid={}",
-                TaskTypeName(task.type), task.subtask, sub.submission_internal_id, pipefd[0], pid, uid);
+  spdlog::debug("Task type={} subtask={} of {} started, handle={} pid={} uid={} cpuid={}",
+                TaskTypeName(task.type), task.subtask, sub.submission_internal_id, pipefd[0], pid, uid, cpuid);
   return pipefd[0];
 }
 
