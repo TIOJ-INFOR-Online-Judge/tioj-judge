@@ -79,21 +79,20 @@ struct TaskEntry {
   long id;
   long submission_internal_id;
   Task task;
-  // TODO FEATURE(group): group_offset (the position in the same group)
   long priority;
+  int task_order;
   int indeg;
   std::vector<long> edges;
 
   TaskEntry() {}
-  TaskEntry(int sub_id, const Task& task, long priority) :
+  TaskEntry(int sub_id, const Task& task, long priority, int order = 0) :
       id(task_count++),
       submission_internal_id(sub_id),
       task(task), priority(priority),
-      indeg(0) {}
+      task_order(order), indeg(0) {}
   bool operator<(const TaskEntry& x) const {
-    // TODO FEATURE(group): order by group_offset first
-    return std::make_tuple(priority, -submission_internal_id, -task.subtask) <
-           std::make_tuple(x.priority, -x.submission_internal_id, -x.task.subtask);
+    return std::make_tuple(priority, -submission_internal_id, -task_order) <
+           std::make_tuple(x.priority, -x.submission_internal_id, -x.task_order);
   }
 };
 long TaskEntry::task_count = 0;
@@ -115,7 +114,7 @@ std::unordered_map<long, Submission> submission_list;
 // cancelling related
 std::unordered_map<long, long> submission_id_map; // submission id -> internal id
 std::unordered_set<long> cancelled_list;
-// TODO FEATURE(group): cancelled group
+std::unordered_map<long, std::unordered_set<int>> cancelled_group; // internal id -> (group id)
 
 /// Helpers for manipulating graphs
 inline void InsertTaskList(TaskEntry&& task) {
@@ -135,6 +134,15 @@ inline void Remove(const TaskEntry& task) {
   task_list.erase(task.id);
 }
 
+inline bool IsCancelled(long id, const std::vector<int>& groups) {
+  if (cancelled_list.count(id)) return true;
+  auto it = cancelled_group.find(id);
+  if (it == cancelled_group.end() || groups.empty()) return false;
+  for (int group : groups) {
+    if (!it->second.count(group)) return false;
+  }
+  return true;
+}
 
 /// Task env setup
 bool SetupCompile(const Submission& sub, const TaskEntry& task) {
@@ -236,7 +244,7 @@ bool SetupExecute(const Submission& sub, const TaskEntry& task) {
   long id = sub.submission_internal_id;
   int subtask = task.task.subtask;
   int stage = task.task.stage;
-  if (cancelled_list.count(id)) return false; // cancellation check
+  if (IsCancelled(id, sub.td_groups[subtask])) return false; // cancellation check
 
   auto& td_result = sub.td_results[subtask];
   if (stage > 0 && (td_result.skip_stage || td_result.verdict != Verdict::NUL)) return false;
@@ -344,7 +352,7 @@ bool SetupScoring(Submission& sub, const TaskEntry& task) {
   long id = sub.submission_internal_id;
   int subtask = task.task.subtask;
   int stage = task.task.stage;
-  if (cancelled_list.count(id)) return false; // cancellation check
+  if (IsCancelled(id, sub.td_groups[subtask])) return false; // cancellation check
 
   bool last_stage = stage == sub.stages - 1;
   const auto& td_result = sub.td_results[subtask];
@@ -480,6 +488,10 @@ void FinalizeScoring(Submission& sub, const TaskEntry& task, const struct cjail_
   } else if (last_stage && td_result.verdict == Verdict::NUL) {
     td_result.verdict = Verdict::WA;
   }
+  if (sub.skip_group && td_result.verdict != Verdict::NUL && td_result.verdict != Verdict::AC) {
+    const auto& groups = sub.td_groups[subtask];
+    cancelled_group[id].insert(groups.begin(), groups.end());
+  }
 
   // move possibly modified user output back to original position
   // so that it can be read by the next stage
@@ -517,6 +529,7 @@ void FinalizeSubmission(Submission& sub, const TaskEntry& task) {
   } else {
     if (sub.reporter) sub.reporter->ReportOverallResult(sub);
   }
+  cancelled_group.erase(id);
   spdlog::info("Submission finished: id={} sub_id={} list_size={}", id, sub.submission_id, submission_list.size());
   if (sub.reporter) sub.reporter->ReportFinalized(sub, submission_list.size());
   submission_id_map.erase(id);
@@ -628,24 +641,65 @@ bool PushSubmission(Submission&& sub, size_t max_queue) {
   sub.stages = std::min(std::max(1, sub.stages), 32);
   int id = sub.submission_internal_id;
   long priority = sub.priority;
+  int num_tds = sub.td_limits.size();
+  std::vector<int> td_order(num_tds);
+  if (sub.skip_group) {
+    // A simple greedy heuristic to try to skip a group as soon as possible
+    //  expected O(T lg G), where T is the total td-group relationships and
+    //  G is the number of layers (G <= N where N is the number of testdatum)
+    // Partition all testdata into multiple "layers" by inserting a testdata
+    //  the first layer that does not contain all the groups that testdata
+    //  belongs to. That is, it tries to fill each layer with as many groups
+    //  as possible before proceeding to the next layer.
+    std::vector<int> td_layer(num_tds);
+    {
+      std::vector<int> scan_order(num_tds);
+      for (int i = 0; i < num_tds; i++) scan_order[i] = i;
+      // Process testdata with more groups first
+      std::stable_sort(
+          scan_order.begin(), scan_order.end(),
+          [&sub](int a, int b) { return sub.td_groups[a].size() > sub.td_groups[b].size(); });
+      std::vector<std::unordered_set<int>> group_layers;
+      for (int td : scan_order) {
+        auto& td_group = sub.td_groups[td];
+        size_t pos = std::lower_bound(
+            group_layers.begin(), group_layers.end(), true,
+            [&td_group](const auto& layer, bool _) {
+              return std::all_of(
+                  td_group.begin(), td_group.end(),
+                  [&layer](int group) { return layer.count(group); });
+            }) - group_layers.begin();
+        if (pos == group_layers.size()) group_layers.emplace_back();
+        group_layers[pos].insert(td_group.begin(), td_group.end());
+        td_layer[td] = pos;
+      }
+    }
+    std::vector<int> inv_order(num_tds);
+    for (int i = 0; i < num_tds; i++) inv_order[i] = i;
+    std::stable_sort(inv_order.begin(), inv_order.end(),
+                     [&](int a, int b) { return td_layer[a] < td_layer[b]; });
+    for (int i = 0; i < num_tds; i++) td_order[inv_order[i]] = i;
+  } else {
+    for (int i = 0; i < num_tds; i++) td_order[i] = i;
+  }
   std::vector<std::vector<TaskEntry>> executes, scorings;
   TaskEntry finalize(id, {TaskType::FINALIZE, 0, 0}, priority);
-  for (int i = 0; i < (int)sub.td_limits.size(); i++) {
+  for (int i = 0; i < num_tds; i++) {
     executes.emplace_back(); // index i
     scorings.emplace_back();
     if (sub.judge_between_stages) {
       for (int j = 0; j < sub.stages; j++) {
-        executes[i].emplace_back(id, (Task){TaskType::EXECUTE, i, j}, priority);
-        scorings[i].emplace_back(id, (Task){TaskType::SCORING, i, j}, priority);
+        executes[i].emplace_back(id, (Task){TaskType::EXECUTE, i, j}, priority, td_order[i]);
+        scorings[i].emplace_back(id, (Task){TaskType::SCORING, i, j}, priority, td_order[i]);
         Link(executes[i][j], scorings[i][j]);
         if (j > 0) Link(scorings[i][j - 1], executes[i][j]);
       }
     } else {
       for (int j = 0; j < sub.stages; j++) {
-        executes[i].emplace_back(id, (Task){TaskType::EXECUTE, i, j}, priority);
+        executes[i].emplace_back(id, (Task){TaskType::EXECUTE, i, j}, priority, td_order[i]);
         if (j > 0) Link(executes[i][j - 1], executes[i][j]);
       }
-      scorings[i].emplace_back(id, (Task){TaskType::SCORING, i, sub.stages - 1}, priority);
+      scorings[i].emplace_back(id, (Task){TaskType::SCORING, i, sub.stages - 1}, priority, td_order[i]);
       Link(executes[i].back(), scorings[i].back());
     }
     Link(scorings[i].back(), finalize);
