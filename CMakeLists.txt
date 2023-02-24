@@ -87,6 +87,7 @@ else()
 endif()
 
 find_package(OpenSSL REQUIRED)
+find_package(zstd REQUIRED)
 FetchContent_MakeAvailable_Exclude(spdlog fmt ini httplib websocketpp sqlite_orm argparse)
 
 # default scoring
@@ -117,7 +118,7 @@ file(GLOB JUDGE_SRC "src/*.cpp" "src/*.h")
 add_executable(tioj-judge ${JUDGE_SRC})
 target_link_libraries(
     tioj-judge libtioj spdlog::spdlog fmt::fmt tortellini
-    httplib::httplib websocketpp ${OPENSSL_LIBRARIES}
+    httplib::httplib websocketpp ${OPENSSL_LIBRARIES} zstd
     sqlite_orm::sqlite_orm argparse::argparse)
 install(TARGETS tioj-judge DESTINATION bin)
 

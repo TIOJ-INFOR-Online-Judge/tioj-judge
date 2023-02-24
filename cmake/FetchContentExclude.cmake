@@ -12,6 +12,7 @@ function(FetchContent_MakeAvailable_One dep exclude)
       set(SPDLOG_PATCHED ON CACHE INTERNAL "")
     elseif(${dep} STREQUAL "websocketpp" AND NOT DEFINED WEBSOCKETPP_PATCHED)
       # hack websocketpp so that it can be used in-project
+      execute_process(COMMAND sed -i [=[s/cmake_minimum_required.*$/cmake_minimum_required(VERSION 3.0.0)/]=] ${${dep}_SOURCE_DIR}/CMakeLists.txt)
       execute_process(COMMAND sed -i [=[$ a add_library(websocketpp INTERFACE)\nset_target_properties(websocketpp PROPERTIES INTERFACE_INCLUDE_DIRECTORIES "${PROJECT_SOURCE_DIR}")]=] ${${dep}_SOURCE_DIR}/CMakeLists.txt)
       message(STATUS "Patched websocketpp")
       set(WEBSOCKETPP_PATCHED ON CACHE INTERNAL "")

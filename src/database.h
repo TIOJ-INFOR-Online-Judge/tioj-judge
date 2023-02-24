@@ -11,6 +11,8 @@ struct Testdata {
   int problem_id;
   int order;
   long timestamp;
+  bool input_compressed;
+  bool output_compressed;
 };
 
 namespace {
@@ -27,7 +29,9 @@ inline auto InitStorage() {
                  make_column("testdata_id", &Testdata::testdata_id, primary_key()),
                  make_column("problem_id", &Testdata::problem_id),
                  make_column("order", &Testdata::order),
-                 make_column("timestamp", &Testdata::timestamp)));
+                 make_column("timestamp", &Testdata::timestamp),
+                 make_column("input_compressed", &Testdata::input_compressed, default_value(false)),
+                 make_column("output_compressed", &Testdata::output_compressed, default_value(false))));
   storage.sync_schema(true);
   return storage;
 }

@@ -7,6 +7,7 @@
 #include <unordered_set>
 #include <condition_variable>
 
+#include <zstd.h>
 #include <httplib.h>
 #include <fmt/core.h>
 #include <fmt/ranges.h>
@@ -277,19 +278,37 @@ class ServerReporter : public Reporter {
 
 // --- helpers ---
 template <class Method, class... T>
-inline auto DownloadFile(const fs::path& path, T&&... params) {
+inline auto DownloadFile(const fs::path& path, bool compressed, T&&... params) {
   std::ofstream fout;
-  auto reciever = [&fout](const char *data, size_t data_length) {
-    fout.write(data, data_length);
-    return true;
+  auto Init = [&](){
+    if (fout.is_open()) fout.close();
+    fout.open(path);
   };
-  return RequestRetryInit<Method>(
-      [&](){
-        if (fout.is_open()) fout.close();
-        fout.open(path);
-      },
-      std::forward<T>(params)...,
-      reciever);
+  if (compressed) {
+    std::vector<uint8_t> bufOut(ZSTD_DStreamOutSize());
+    ZSTD_DCtx* const dctx = ZSTD_createDCtx();
+    auto reciever = [&](const char *data, size_t data_length) {
+      ZSTD_inBuffer input = {data, data_length, 0};
+      while (input.pos < input.size) {
+        ZSTD_outBuffer output = {bufOut.data(), bufOut.size(), 0};
+        const size_t ret = ZSTD_decompressStream(dctx, &output, &input);
+        if (ZSTD_isError(ret)) return false;
+        fout.write((char*)bufOut.data(), output.pos);
+      }
+      return true;
+    };
+    auto ret = RequestRetryInit<Method>(
+        Init, std::forward<T>(params)..., reciever);
+    ZSTD_freeDCtx(dctx);
+    return ret;
+  } else {
+    auto reciever = [&fout](const char *data, size_t data_length) {
+      fout.write(data, data_length);
+      return true;
+    };
+    return RequestRetryInit<Method>(
+        Init, std::forward<T>(params)..., reciever);
+  }
 }
 
 httplib::Params AddKey(httplib::Params&& params) {
@@ -330,7 +349,7 @@ bool DealOneSubmission(nlohmann::json&& data) {
   int td_count = 0, orig_td_count = 0;
   std::vector<long> to_download, to_delete;
   std::vector<std::pair<int, long>> to_update_position;
-  std::vector<Testdata> new_meta;
+  std::unordered_map<long, Testdata> new_meta;
   try {
     if (data.empty()) return false;
     sub.submission_id = data["submission_id"].get<int>();
@@ -374,7 +393,6 @@ bool DealOneSubmission(nlohmann::json&& data) {
     td_count = td.size();
     {
       std::unordered_map<long, Testdata> orig_td;
-      std::unordered_set<long> new_td;
       for (auto& i : db.ProblemTd(sub.problem_id)) {
         orig_td[i.testdata_id] = i;
         if (i.order >= orig_td_count) orig_td_count = i.order + 1;
@@ -385,6 +403,8 @@ bool DealOneSubmission(nlohmann::json&& data) {
         Testdata td;
         td.testdata_id = td_item["id"].get<int>();
         td.timestamp = td_item["updated_at"].get<long>();
+        td.input_compressed = td_item.value("input_compressed", false);
+        td.output_compressed = td_item.value("output_compressed", false);
         td.order = i;
         td.problem_id = sub.problem_id;
         auto it = orig_td.find(td.testdata_id);
@@ -394,8 +414,7 @@ bool DealOneSubmission(nlohmann::json&& data) {
         if (it == orig_td.end() || it->second.order != i) {
           to_update_position.push_back({i, td.testdata_id});
         }
-        new_meta.push_back(td);
-        new_td.insert(td.testdata_id);
+        new_meta.insert({td.testdata_id, td});
 
         // limits
         auto& lim = sub.td_limits[i];
@@ -411,7 +430,7 @@ bool DealOneSubmission(nlohmann::json&& data) {
         lim.ignore_verdict = td_item["verdict_ignore"].get<bool>();
       }
       for (auto& i : orig_td) {
-        if (!new_td.count(i.first)) to_delete.push_back(i.first);
+        if (!new_meta.count(i.first)) to_delete.push_back(i.first);
       }
     }
 
@@ -433,12 +452,15 @@ bool DealOneSubmission(nlohmann::json&& data) {
   // download testdata
   for (long testdata_id : to_download) {
     if (!CreateDirs(TdPoolDir(testdata_id))) return false;
+    const Testdata& td = new_meta.at(testdata_id);
     // input
-    auto res = DownloadFile<HTTPGet>(TdPoolPath(testdata_id, true, true), cli, "/fetch/testdata",
+    auto res = DownloadFile<HTTPGet>(TdPoolPath(testdata_id, true, true),
+        td.input_compressed, cli, "/fetch/testdata",
         AddKey({{"tid", std::to_string(testdata_id)}, {"input", ""}}), Headers());
     if (!IsSuccess(res)) return false;
     // output
-    res = DownloadFile<HTTPGet>(TdPoolPath(testdata_id, false, true), cli, "/fetch/testdata",
+    res = DownloadFile<HTTPGet>(TdPoolPath(testdata_id, false, true),
+        td.output_compressed, cli, "/fetch/testdata",
         AddKey({{"tid", std::to_string(testdata_id)}}), Headers());
     if (!IsSuccess(res)) return false;
   }
@@ -476,7 +498,11 @@ bool DealOneSubmission(nlohmann::json&& data) {
     }
   }
   // update database meta
-  db.UpdateTd(new_meta);
+  {
+    std::vector<Testdata> new_td;
+    for (auto& i : new_meta) new_td.push_back(i.second);
+    db.UpdateTd(new_td);
+  }
   // finalize & push
   sub.submission_internal_id = GetUniqueSubmissionInternalId();
   sub.reporter = &server_reporter;

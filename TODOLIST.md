@@ -1,5 +1,5 @@
 - [x] Add option to stop on first non-AC testdata of each task (TODO FEATURE(group))
-- [ ] Download compressed testdata
+- [x] Download compressed testdata
 - [ ] User-specified compilation flags (special judge / user program)
 - [ ] Pin judge (platform-independent judge result)
 - [ ] I/O Interactive (TODO FEATURE(io-interactive))
