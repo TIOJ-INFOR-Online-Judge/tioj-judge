@@ -65,7 +65,7 @@ void ParseArgs(int argc, char** argv) {
     .implicit_value(true)
     .help("Not check for other running instances");
   parser.add_argument("--pinned-cpus")
-    .help("Comma-separated list of CPUs to pin or simply \"all\"");
+    .help("Comma-separated list of CPUs to pin or simply \"all\" or \"none\"");
 
   try {
     parser.parse_args(argc, argv);

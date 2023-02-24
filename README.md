@@ -56,12 +56,12 @@ max_rss_per_task_mb = 2048
 max_output_per_task_mb = 1024
 max_submission_queue_size = 20
 time_multiplier = 1.0
-pinned_cpus = all
+pinned_cpus = none
 ```
 
-- The indicated values except `tioj_url`, `tioj_key` and `pinned_cpus` are the default values.
+- The indicated values except `tioj_url`, `tioj_key` are the default values.
 - `time_multiplier` is the ratio of the indicated time to the real time. Thus, the multiplier should be larger if the computer is faster, and smaller if the computer is slower.
-- `pinned_cpus` can be a comma-seprated list of CPUs or simply `all`. If this option is specified, we will pin each submission to one of the provided CPUs.
+- `pinned_cpus` can be a list of CPUs using the same format used in the `cpuset`'s `-c` option (e.g. `0,2-3,6-9:2`), or simply `all` or `none`. If this option is specified, each task (including compiling, execution, etc.) will be pinned to one of the provided CPUs.
 
 ### Docker Usage
 

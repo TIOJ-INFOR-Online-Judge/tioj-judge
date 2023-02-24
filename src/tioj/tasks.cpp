@@ -273,8 +273,9 @@ bool Wait() {
     // we don't close(i.first) here, because it will release the handle and make it clash
     waitpid(std::get<0>(i.second), nullptr, 0);
     uid_pool.push_back(std::get<1>(i.second));
-    if (int cpuid = std::get<2>(i.second); cpuid != -1)
+    if (int cpuid = std::get<2>(i.second); cpuid != -1) {
       cpuid_pool.push_back(cpuid);
+    }
     finished[i.first] = res;
     to_remove.push_back(i.first);
   }

@@ -123,6 +123,7 @@ CJailCtxClass SandboxOptions::ToCJailCtx() const {
   } else {
     CPU_ZERO(&ret.cpu_set_);
     for (auto& i : cpu_set) CPU_SET(i, &ret.cpu_set_);
+    ctx.cpuset = &ret.cpu_set_;
   }
   ctx.uid = uid;
   ctx.gid = gid;
