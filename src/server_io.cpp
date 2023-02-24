@@ -339,6 +339,7 @@ bool DealOneSubmission(nlohmann::json&& data) {
     sub.lang = GetCompiler(data["compiler"].get<std::string>());
     sub.submission_time = data["time"].get<int64_t>();
     std::ofstream(tempdir.UserCodePath()) << data["code"].get<std::string>();
+    sub.skip_group = data.value("skip_group", false);
 
     // user information
     auto& user = data["user"];
@@ -413,7 +414,18 @@ bool DealOneSubmission(nlohmann::json&& data) {
         if (!new_td.count(i.first)) to_delete.push_back(i.first);
       }
     }
-    // TODO FEATURE(group): read tasks
+
+    // tasks/groups
+    sub.td_groups.resize(td.size());
+    auto& tasks = data["tasks"];
+    {
+      for (size_t i = 0; i < tasks.size(); i++) {
+        auto& item = tasks[i];
+        for (auto& td_pos : item["positions"]) {
+          sub.td_groups[td_pos.get<int>()].push_back(i);
+        }
+      }
+    }
   } catch (json::exception& err) {
     spdlog::warn("Submission parsing error: {}", err.what());
     return false;

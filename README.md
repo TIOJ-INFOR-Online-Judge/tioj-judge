@@ -19,15 +19,27 @@
 
 ## Judge Server
 
+### Dependency packages
+On Ubuntu 22.04, you can use the following command to install dependencies.
+
+```bash
+apt update
+apt install -y git g++ cmake ninja-build \
+  libseccomp-dev libnl-genl-3-dev libsqlite3-dev libz-dev libssl-dev \
+  libboost-all-dev \
+  ghc python2 python3 python3-numpy python3-pil
+```
+
 ### Installation
 
 Boost is required to compile the judge server.
 
 ```
 mkdir build
-cmake ..
-make -j8
-sudo make install
+cd build
+cmake -G ninja ..
+ninja
+sudo ninja install
 ```
 
 This will also install `libtioj` and its dependencies (namely `nlohmann_json` and `cjail`). Specify `-DTIOJ_INSTALL_LIBTIOJ=0` if only the judge client is needed.

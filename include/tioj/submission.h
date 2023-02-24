@@ -107,8 +107,8 @@ class Submission {
     bool ignore_verdict;
   };
   std::vector<TestdataLimit> td_limits;
-  // TODO FEATURE(group): testdata group
-  // TODO FEATURE(group): bool skip_group
+  std::vector<std::vector<int>> td_groups;
+  bool skip_group; // skip a group of testdata if any of them got non-AC
 
   // task result
   struct TestdataResult {
