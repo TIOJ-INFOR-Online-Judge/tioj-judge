@@ -166,8 +166,8 @@ class TIOJClient : public WsClient {
     }).detach();
   }
  public:
-  // TODO: escape TIOJKey
-  TIOJClient() : WsClient("ws" + kTIOJUrl.substr(4) + "/cable?key=" + kTIOJKey) {}
+  TIOJClient() : WsClient("ws" + kTIOJUrl.substr(4) + "/cable?" + httplib::detail::params_to_query_str({
+      {"key", kTIOJKey}, {"version", kVersionCode}})) {}
 
   double last_ping = 0;
 
@@ -185,7 +185,8 @@ class TIOJClient : public WsClient {
     ReconnectThread_();
   }
   void OnClose() override {
-    spdlog::warn("Connection with server closed, reconnect in 3 seconds");
+    spdlog::warn("Connection with server closed, reconnect in 3 seconds. "
+                 "If this keep happening, check if the key and the client version are correct");
     ReconnectThread_();
   }
 
