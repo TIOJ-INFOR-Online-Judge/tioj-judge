@@ -9,7 +9,7 @@
 #include "reporter.h"
 
 extern int kMaxParallel;
-extern std::string kPinnedCpus;
+extern cpu_set_t kPinnedCpus;
 // KiB
 extern long kMaxRSS;
 extern long kMaxOutput;

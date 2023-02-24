@@ -1,5 +1,6 @@
 #include <fcntl.h>
 #include <unistd.h>
+#include <sys/sysinfo.h>
 #include <thread>
 #include <fstream>
 #include <filesystem>
@@ -7,35 +8,40 @@
 #include <tortellini.hh>
 #include <spdlog/spdlog.h>
 #include <argparse/argparse.hpp>
+
 #include <tioj/logger.h>
 #include "tioj/paths.h"
 #include "tioj/submission.h"
+#include "cpuset.h"
 #include "server_io.h"
 
 namespace {
 
 bool to_lock = true;
 
-bool ParseConfig(const fs::path& conf_path) {
+void SetPinnedCPU(const std::string& cpu_str) {
+  if (!CpusetParse(cpu_str.c_str(), &kPinnedCpus, get_nprocs())) {
+    throw std::runtime_error("Invalid CPU mask");
+  }
+}
+
+void ParseConfig(const fs::path& conf_path) {
   std::ifstream fin(conf_path);
-  if (!fin) return false;
+  if (!fin) throw std::runtime_error("File not found");
   tortellini::ini ini;
   fin >> ini;
   std::string box_root = ini[""]["box_root"] | "";
   std::string submission_root = ini[""]["submission_root"] | "";
-  // std::string data_dir = ini[""]["data_dir"] | "";
   if (box_root.size()) kBoxRoot = box_root;
   if (submission_root.size()) kSubmissionRoot = submission_root;
-  // if (data_dir.size()) kDataDir = data_dir;
   kMaxParallel = ini[""]["parallel"] | kMaxParallel;
-  kPinnedCpus = ini[""]["pinned_cpus"] | kPinnedCpus;
+  SetPinnedCPU(ini[""]["pinned_cpus"] | "none");
   kMaxRSS = (ini[""]["max_rss_per_task_mb"] | (kMaxRSS / 1024)) * 1024;
   kMaxOutput = (ini[""]["max_output_per_task_mb"] | (kMaxRSS / 1024)) * 1024;
   kMaxQueue = ini[""]["max_submission_queue_size"] | kMaxQueue;
   kTimeMultiplier = ini[""]["time_multiplier"] | kTimeMultiplier;
   kTIOJUrl = ini[""]["tioj_url"] | kTIOJUrl;
   kTIOJKey = ini[""]["tioj_key"] | kTIOJKey;
-  return true;
 }
 
 void ParseArgs(int argc, char** argv) {
@@ -59,7 +65,6 @@ void ParseArgs(int argc, char** argv) {
     .implicit_value(true)
     .help("Not check for other running instances");
   parser.add_argument("--pinned-cpus")
-    .default_value(std::string(""))
     .help("Comma-separated list of CPUs to pin or simply \"all\"");
 
   try {
@@ -76,8 +81,10 @@ void ParseArgs(int argc, char** argv) {
     default: spdlog::set_level(spdlog::level::debug); break;
   }
   fs::path config_file = parser.get<std::string>("--config");
-  if (!ParseConfig(config_file)) {
-    spdlog::error("Failed to parse configuration file {}", std::string(config_file));
+  try {
+    ParseConfig(config_file);
+  } catch (const std::runtime_error& err) {
+    spdlog::error("Failed to parse configuration file {}: {}", std::string(config_file), err.what());
     exit(1);
   }
   if (auto val = parser.present<int>("--parallel")) {
@@ -87,8 +94,16 @@ void ParseArgs(int argc, char** argv) {
     kTimeMultiplier = val.value();
   }
   to_lock = parser["--no-lock"] == false;
-  if (auto pinned_cpus = parser.get<std::string>("--pinned-cpus"); pinned_cpus.size()) {
-    kPinnedCpus = pinned_cpus;
+  if (auto val = parser.present<std::string>("--pinned-cpus")) {
+    try {
+      SetPinnedCPU(val.value());
+    } catch (const std::runtime_error& err) {
+      spdlog::error("{}", err.what());
+      exit(1);
+    }
+  }
+  if (CPU_COUNT(&kPinnedCpus) && CPU_COUNT(&kPinnedCpus) < kMaxParallel) {
+    spdlog::warn("Parallelism larger than the number of pinned CPUs. Some tasks may not be pinned.");
   }
 }
 

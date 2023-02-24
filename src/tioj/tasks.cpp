@@ -250,34 +250,11 @@ fd_set running_fdset;
 std::map<int, std::tuple<int, int, int>> running; // fd -> (pid, uid, cpuid)
 std::unordered_map<int, struct cjail_result> finished; // fd -> result
 
-void InitCpuidPool() {
-  if (kPinnedCpus.empty()) {
-    cpuid_pool.push_back(-1);
-  } else if (kPinnedCpus == "all") {
-    cpuid_pool.resize(get_nprocs());
-    std::iota(cpuid_pool.begin(), cpuid_pool.end(), 0);
-  } else {
-    int cpuid = -1;
-    for (auto c : kPinnedCpus) {
-      if (std::isdigit(c)) {
-        if (cpuid == -1)
-          cpuid = 0;
-         cpuid = cpuid * 10 + c - '0';
-      } else if (c == ',' or std::isspace(c)) {
-        if (cpuid != -1) {
-          cpuid_pool.push_back(cpuid);
-          cpuid = -1;
-        }
-      } else {
-        spdlog::error("Unknown character '{}' in pinned_cpus", c);
-      }
-    }
-  }
-}
-
 void InitPools() {
   for (int i = 0; i < kUidPoolSize; i++) uid_pool.push_back(i + kUidBase);
-  InitCpuidPool();
+  for (int i = 0, N = get_nprocs(); i < N; i++) {
+    if (CPU_ISSET(i, &kPinnedCpus)) cpuid_pool.push_back(i);
+  }
   FD_ZERO(&running_fdset);
   pool_init = true;
 }
@@ -317,10 +294,15 @@ int RunTask(const Submission& sub, const Task& task) {
   if (pipe(pipefd) < 0) return -1;
   int uid = uid_pool.back();
   uid_pool.pop_back();
-  if (cpuid_pool.empty()) spdlog::critical("No available cpu");
-  int cpuid = cpuid_pool.back();
-  cpuid_pool.pop_back();
-  if (cpuid == -1) cpuid_pool.push_back(-1);
+  int cpuid = -1;
+  if (cpuid_pool.empty()) {
+    if (CPU_COUNT(&kPinnedCpus)) {
+      spdlog::warn("No available cpu; task won\'t be pinned");
+    }
+  } else {
+    cpuid = cpuid_pool.back();
+    cpuid_pool.pop_back();
+  }
   pid_t pid = fork();
   if (pid < 0) {
     uid_pool.push_back(uid);

@@ -17,7 +17,7 @@
 #include "paths.h"
 
 int kMaxParallel = 1;
-std::string kPinnedCpus = "";
+cpu_set_t kPinnedCpus = {};
 long kMaxRSS = 2 * 1024 * 1024; // 2G
 long kMaxOutput = 1 * 1024 * 1024; // 1G
 double kTimeMultiplier = 1.0;
