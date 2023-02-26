@@ -37,7 +37,7 @@ apt install -y git g++ cmake ninja-build \
 ```
 mkdir build
 cd build
-cmake -G ninja ..
+cmake -G Ninja ..
 ninja
 sudo ninja install
 ```
