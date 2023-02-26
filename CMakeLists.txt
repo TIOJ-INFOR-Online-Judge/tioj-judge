@@ -14,6 +14,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
 set(CMAKE_CXX_FLAGS_DEBUG "-Og -g")
 set(CMAKE_CXX_FLAGS_RELEASE "-O3")
+set(CMAKE_VERBOSE_MAKEFILE ON CACHE BOOL "ON")
 
 # options
 option(TIOJ_BUILD_TESTS "Build test programs" ON)
@@ -56,7 +57,7 @@ FetchContent_Declare(
 )
 FetchContent_Declare(
   json
-  URL "https://github.com/nlohmann/json/archive/refs/tags/v3.10.5.zip"
+  URL "https://github.com/nlohmann/json/archive/refs/tags/v3.11.2.zip"
 )
 FetchContent_Declare(
   ini
@@ -65,7 +66,7 @@ FetchContent_Declare(
 )
 FetchContent_Declare(
   httplib
-  URL "https://github.com/yhirose/cpp-httplib/archive/refs/tags/v0.10.8.zip"
+  URL "https://github.com/yhirose/cpp-httplib/archive/refs/tags/v0.12.0.zip"
 )
 FetchContent_Declare(
   websocketpp
@@ -73,11 +74,11 @@ FetchContent_Declare(
 )
 FetchContent_Declare(
   sqlite_orm
-  URL "https://github.com/fnc12/sqlite_orm/archive/refs/tags/v1.7.1.zip"
+  URL "https://github.com/fnc12/sqlite_orm/archive/refs/tags/v1.8.1.zip"
 )
 FetchContent_Declare(
   argparse
-  URL "https://github.com/p-ranav/argparse/archive/refs/tags/v2.5.zip"
+  URL "https://github.com/p-ranav/argparse/archive/refs/tags/v2.9.zip"
 )
 
 if(TIOJ_INSTALL_LIBTIOJ AND TIOJ_INSTALL_DEPENDENCIES)
