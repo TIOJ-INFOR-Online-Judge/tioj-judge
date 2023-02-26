@@ -145,6 +145,12 @@ inline bool IsCancelled(long id, const std::vector<int>& groups) {
   return true;
 }
 
+inline long NormalizeScore(long double score) {
+  if (score > 1e+6) score = 1e+6;
+  if (score < -1e+6) score = -1e+6;
+  return std::lround(score * 1'000'000);
+}
+
 /// Task env setup
 bool SetupCompile(const Submission& sub, const TaskEntry& task) {
   long id = sub.submission_internal_id;
@@ -414,14 +420,33 @@ void FinalizeScoring(Submission& sub, const TaskEntry& task, const struct cjail_
     // skip remaining stages
     if (td_result.verdict == Verdict::NUL) td_result.verdict = Verdict::WA;
   } else if (sub.specjudge_type == SpecjudgeType::SPECJUDGE_OLD) {
-    int x = 1;
+    int x;
     std::ifstream fin(output_path);
-    if (fin >> x && x == 0) {
+    bool success = bool(fin >> x); // x would be set to 0 if failed, so this is necessary
+    if (success && x == 0) {
       if (last_stage) {
         td_result.verdict = Verdict::AC;
         td_result.score = 100'000'000;
-      } // else: continue
-    } else if (!last_stage) {
+      } // else: continue (NUL)
+      std::string cmd;
+      bool score_overriden = false;
+      while (fin >> cmd) {
+        if (cmd == "SPECJUDGE_OVERRIDE_SCORE") {
+          long double score;
+          if (fin >> score) {
+            td_result.score = NormalizeScore(score);
+            score_overriden = true;
+          }
+        } else if (cmd == "SPECJUDGE_OVERRIDE_VERDICT") {
+          if (fin >> cmd) {
+            td_result.verdict = AbrToVerdict(cmd, true);
+            if (!score_overriden && td_result.verdict == Verdict::AC) td_result.score = 100'000'000;
+          }
+        } else {
+          break;
+        }
+      }
+    } else {
       td_result.verdict = Verdict::WA;
     }
   } else {
@@ -437,17 +462,13 @@ void FinalizeScoring(Submission& sub, const TaskEntry& task, const struct cjail_
         if (td_result.verdict == Verdict::AC) td_result.score = 100'000'000;
       } // else: WA
       if (auto it = json.find("score"); it != json.end()) {
-        long double score = td_result.score / 1'000'000;
         try {
           if (it->is_string()) {
-            score = std::stold(it->get<std::string>());
+            td_result.score = NormalizeScore(std::stold(it->get<std::string>()));
           } else if (it->is_number()) {
-            score = it->get<long double>();
+            td_result.score = NormalizeScore(it->get<long double>());
           }
         } catch (...) {}
-        if (score > 1e+6) score = 1e+6;
-        if (score < -1e+6) score = -1e+6;
-        td_result.score = std::lround(score * 1'000'000);
       }
       if (auto it = json.find("time_us"); it != json.end() && it->is_number()) {
         try {
