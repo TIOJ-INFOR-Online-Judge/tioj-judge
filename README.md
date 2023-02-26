@@ -16,23 +16,23 @@
 - A library interface `libtioj` that can be used independently
 - A time multiplier to compensate speed difference of multiple judge clients
 - Support some basic judging modes (such as floating-point compare, strict compare and white-diff compare) without the need of user-provided special judge program
+- An option to skip testdata once any of the testdata in the group got non-AC
 
 ## Judge Server
 
-### Dependency packages
-On Ubuntu 22.04, you can use the following command to install dependencies.
+### Prerequisites
+
+On Ubuntu 22.04, you can use the following command to install the dependencies.
 
 ```bash
 apt update
 apt install -y git g++ cmake ninja-build \
   libseccomp-dev libnl-genl-3-dev libsqlite3-dev libz-dev libssl-dev \
-  libboost-all-dev \
+  libboost-all-dev libzstd-dev \
   ghc python2 python3 python3-numpy python3-pil
 ```
 
 ### Installation
-
-Boost is required to compile the judge server.
 
 ```
 mkdir build
