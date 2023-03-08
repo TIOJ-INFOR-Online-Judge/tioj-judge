@@ -100,7 +100,7 @@ install(TARGETS default-scoring DESTINATION "${TIOJ_DATA_DIR}/")
 add_executable(sandbox-exec "src/tioj/sandbox_main.cpp" "src/tioj/sandbox.cpp" "src/tioj/sandbox.h")
 target_link_libraries(sandbox-exec CJail::libcjail)
 target_compile_options(sandbox-exec PUBLIC -Os -static) # note that later flags will override previous ones
-target_link_options(sandbox-exec PUBLIC -static -pthread)
+target_link_options(sandbox-exec PUBLIC -static -pthread -Wl,--gc-sections)
 install(TARGETS sandbox-exec DESTINATION "${TIOJ_DATA_DIR}/")
 
 # headers for judge
