@@ -335,6 +335,39 @@ class TempDirectory { // RAII tempdir
   }
 };
 
+unsigned char Base64CharToValue(const unsigned char chr) {
+  if      (chr >= 'A' && chr <= 'Z') return chr - 'A';
+  else if (chr >= 'a' && chr <= 'z') return chr - 'a' + ('Z' - 'A')               + 1;
+  else if (chr >= '0' && chr <= '9') return chr - '0' + ('Z' - 'A') + ('z' - 'a') + 2;
+  else if (chr == '+' || chr == '-') return 62;
+  else if (chr == '/' || chr == '_') return 63;
+  return 0;
+}
+
+void OutputBase64(std::ostream& fout, const std::string& str) {
+  size_t i = 0;
+  for (; i + 4 < str.size(); i += 4) {
+    unsigned char v[4] = {
+      Base64CharToValue(str[i]),
+      Base64CharToValue(str[i+1]),
+      Base64CharToValue(str[i+2]),
+      Base64CharToValue(str[i+3])
+    };
+    fout << static_cast<unsigned char>((v[0] << 2) | (v[1] & 0x30) >> 4);
+    fout << static_cast<unsigned char>((v[1] & 0x0f) << 4 | (v[2] & 0x3c) >> 2);
+    fout << static_cast<unsigned char>((v[2] & 0x03) << 6 | v[3]);
+  }
+  if (i + 1 >= str.size() || str[i+1] == '=') return;
+  unsigned char v[4] = {Base64CharToValue(str[i]), Base64CharToValue(str[i+1])};
+  fout << static_cast<unsigned char>((v[0] << 2) | (v[1] & 0x30) >> 4);
+  if (i + 2 >= str.size() || str[i+2] == '=') return;
+  v[2] = Base64CharToValue(str[i+2]);
+  fout << static_cast<unsigned char>((v[1] & 0x0f) << 4 | (v[2] & 0x3c) >> 2);
+  if (i + 3 >= str.size() || str[i+3] == '=') return;
+  v[3] = Base64CharToValue(str[i+3]);
+  fout << static_cast<unsigned char>((v[2] & 0x03) << 6 | v[3]);
+}
+
 bool DealOneSubmission(nlohmann::json&& data) {
   using namespace httplib;
   using namespace sqlite_orm;
@@ -358,7 +391,12 @@ bool DealOneSubmission(nlohmann::json&& data) {
     sub.priority = data["priority"].get<long>();
     sub.lang = GetCompiler(data["compiler"].get<std::string>());
     sub.submission_time = data["time"].get<int64_t>();
-    std::ofstream(tempdir.UserCodePath()) << data["code"].get<std::string>();
+    if (data.contains("code_base64")) {
+      std::ofstream fout(tempdir.UserCodePath());
+      OutputBase64(fout, data["code_base64"].get<std::string>());
+    } else {
+      std::ofstream(tempdir.UserCodePath()) << data["code"].get<std::string>();
+    }
     sub.skip_group = data.value("skip_group", false);
 
     // user information
