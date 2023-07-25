@@ -30,23 +30,23 @@ inline long ToUs(const struct timeval& v) {
 
 } // namespace
 
-nlohmann::json Submission::TestdataMeta(int subtask, int stage) const {
-  const struct cjail_result& res = td_results[subtask].execute_result;
-  const TestdataItem& lim = testdata[subtask];
-  const TestdataResult& td_result = td_results[subtask];
+nlohmann::json SubmissionAndResult::TestdataMeta(int subtask, int stage) const {
+  const Submission::TestdataItem& lim = sub.testdata[subtask];
+  const SubmissionResult::TestdataResult& td_result = result.td_results[subtask];
+  const struct cjail_result& res = td_result.execute_result;
   return {
     {"input_file", ScoringBoxTdInput(-1, -1, -1, true)},
     {"answer_file", ScoringBoxTdOutput(-1, -1, -1, true)},
     {"user_output_file", ScoringBoxUserOutput(-1, -1, -1, true)},
-    {"user_code_file", ScoringBoxCode(-1, -1, -1, lang, true)},
-    {"problem_id", problem_id},
-    {"contest_id", contest_id},
-    {"submission_id", submission_id},
-    {"submitter_id", submitter_id},
-    {"submitter_name", submitter_name},
-    {"submitter_nickname", submitter_nickname},
-    {"submission_time", submission_time},
-    {"compiler", CompilerName(lang)},
+    {"user_code_file", ScoringBoxCode(-1, -1, -1, sub.lang, true)},
+    {"problem_id", sub.problem_id},
+    {"contest_id", sub.contest_id},
+    {"submission_id", sub.submission_id},
+    {"submitter_id", sub.submitter_id},
+    {"submitter_name", sub.submitter_name},
+    {"submitter_nickname", sub.submitter_nickname},
+    {"submission_time", sub.submission_time},
+    {"compiler", CompilerName(sub.lang)},
     {"testdata_index", subtask},
     {"current_stage", stage},
     {"original_verdict", VerdictToAbr(td_result.verdict)},
@@ -110,7 +110,7 @@ struct PriorityCompare {
 
 std::priority_queue<long, std::vector<long>, PriorityCompare> task_queue;
 std::unordered_map<int, long> handle_map;
-std::unordered_map<long, Submission> submission_list;
+std::unordered_map<long, SubmissionAndResult> submission_list;
 
 // cancelling related
 std::unordered_map<long, long> submission_id_map; // submission id -> internal id
@@ -152,7 +152,8 @@ inline long NormalizeScore(long double score) {
 }
 
 /// Task env setup
-bool SetupCompile(const Submission& sub, const TaskEntry& task) {
+bool SetupCompile(const SubmissionAndResult& sub_and_result, const TaskEntry& task) {
+  const Submission& sub = sub_and_result.sub;
   long id = sub.submission_internal_id;
   CompileSubtask subtask = (CompileSubtask)task.task.subtask;
   if (cancelled_list.count(id)) return false; // cancellation check
@@ -160,7 +161,7 @@ bool SetupCompile(const Submission& sub, const TaskEntry& task) {
   CreateDirs(Workdir(CompileBoxPath(id, subtask)), fs::perms::all);
   switch (subtask) {
     case CompileSubtask::USERPROG: {
-      if (sub.reporter) sub.reporter->ReportStartCompiling(sub);
+      if (sub.reporter.ReportStartCompiling) sub.reporter.ReportStartCompiling(sub, sub_and_result.result);
       Copy(SubmissionUserCode(id), CompileBoxInput(id, subtask, sub.lang), kPerm666);
       switch (sub.interlib_type) {
         case InterlibType::NONE: break;
@@ -189,7 +190,10 @@ bool SetupCompile(const Submission& sub, const TaskEntry& task) {
   return true;
 }
 
-void FinalizeCompile(Submission& sub, const TaskEntry& task, const struct cjail_result& res) {
+void FinalizeCompile(SubmissionAndResult& sub_and_result, const TaskEntry& task, const struct cjail_result& cjail_res) {
+  const Submission& sub = sub_and_result.sub;
+  SubmissionResult& sub_res = sub_and_result.result;
+
   constexpr size_t kMaxMsgLen = 4000;
   static const std::regex kFilterRegex(
       "(^|\\n)In file included from[\\S\\s]*?(\\n/workdir/prog|$)");
@@ -198,17 +202,17 @@ void FinalizeCompile(Submission& sub, const TaskEntry& task, const struct cjail_
   long id = sub.submission_internal_id;
   CompileSubtask subtask = (CompileSubtask)task.task.subtask;
   auto lang = subtask == CompileSubtask::USERPROG ? sub.lang : sub.specjudge_lang;
-  if (res.timekill == -1) {
-    sub.verdict = Verdict::JE;
-  } else if (res.timekill || res.oomkill > 0 || res.info.si_status != 0 ||
+  if (cjail_res.timekill == -1) {
+    sub_res.verdict = Verdict::JE;
+  } else if (cjail_res.timekill || cjail_res.oomkill > 0 || cjail_res.info.si_status != 0 ||
       !fs::is_regular_file(CompileBoxOutput(id, subtask, lang))) {
-    if (res.timekill || res.oomkill > 0) {
-      sub.verdict = subtask == CompileSubtask::USERPROG ? Verdict::CLE : Verdict::ER;
+    if (cjail_res.timekill || cjail_res.oomkill > 0) {
+      sub_res.verdict = subtask == CompileSubtask::USERPROG ? Verdict::CLE : Verdict::ER;
     } else {
-      sub.verdict = subtask == CompileSubtask::USERPROG ? Verdict::CE : Verdict::ER;
+      sub_res.verdict = subtask == CompileSubtask::USERPROG ? Verdict::CE : Verdict::ER;
     }
     spdlog::info("Compilation failed: id={} subtask={} verdict={}",
-                 id, CompileSubtaskName(subtask), VerdictToAbr(sub.verdict));
+                 id, CompileSubtaskName(subtask), VerdictToAbr(sub_res.verdict));
 
     fs::path path = CompileBoxMessage(id, subtask);
     std::string message;
@@ -230,13 +234,13 @@ void FinalizeCompile(Submission& sub, const TaskEntry& task, const struct cjail_
     }
     switch (subtask) {
       case CompileSubtask::USERPROG: {
-        sub.ce_message = std::move(message);
-        if (sub.reporter) sub.reporter->ReportCEMessage(sub);
+        sub_res.ce_message = std::move(message);
+        if (sub.reporter.ReportCEMessage) sub.reporter.ReportCEMessage(sub, sub_res);
         break;
       }
       case CompileSubtask::SPECJUDGE: {
-        sub.er_message = std::move(message);
-        if (sub.reporter) sub.reporter->ReportERMessage(sub);
+        sub_res.er_message = std::move(message);
+        if (sub.reporter.ReportERMessage) sub.reporter.ReportERMessage(sub, sub_res);
         break;
       }
     }
@@ -246,14 +250,17 @@ void FinalizeCompile(Submission& sub, const TaskEntry& task, const struct cjail_
   }
 }
 
-bool SetupExecute(const Submission& sub, const TaskEntry& task) {
-  if (sub.verdict != Verdict::NUL) return false; // CE check
+bool SetupExecute(SubmissionAndResult& sub_and_result, const TaskEntry& task) {
+  const Submission& sub = sub_and_result.sub;
+  SubmissionResult& res = sub_and_result.result;
+
+  if (res.verdict != Verdict::NUL) return false; // CE check
   long id = sub.submission_internal_id;
   int subtask = task.task.subtask;
   int stage = task.task.stage;
   if (IsCancelled(id, sub.testdata[subtask].td_groups)) return false; // cancellation check
 
-  auto& td_result = sub.td_results[subtask];
+  auto& td_result = res.td_results[subtask];
   if (stage > 0 && (td_result.skip_stage || td_result.verdict != Verdict::NUL)) return false;
   auto workdir = Workdir(ExecuteBoxPath(id, subtask, stage));
   CreateDirs(workdir);
@@ -292,13 +299,16 @@ bool SetupExecute(const Submission& sub, const TaskEntry& task) {
   return true;
 }
 
-void FinalizeExecute(Submission& sub, const TaskEntry& task, const struct cjail_result& res) {
+void FinalizeExecute(SubmissionAndResult& sub_and_result, const TaskEntry& task, const struct cjail_result& cjail_res) {
+  const Submission& sub = sub_and_result.sub;
+  SubmissionResult& sub_res = sub_and_result.result;
+
   long id = sub.submission_internal_id;
   int subtask = task.task.subtask;
   int stage = task.task.stage;
-  if (subtask >= (int)sub.td_results.size()) sub.td_results.resize(subtask + 1);
-  auto& td_result = sub.td_results[subtask];
-  td_result.execute_result = res;
+  if (subtask >= (int)sub_res.td_results.size()) sub_res.td_results.resize(subtask + 1);
+  auto& td_result = sub_res.td_results[subtask];
+  td_result.execute_result = cjail_res;
   Move(ExecuteBoxOutput(id, subtask, stage, sub.sandbox_strict),
        ExecuteBoxFinalOutput(id, subtask, stage));
   IGNORE_RETURN(chown(ExecuteBoxFinalOutput(id, subtask, stage).c_str(), 0, 0));
@@ -312,25 +322,25 @@ void FinalizeExecute(Submission& sub, const TaskEntry& task, const struct cjail_
   }
   auto& lim = sub.testdata[subtask];
   if (stage == 0) {
-    td_result.vss = res.stats.hiwater_vm;
-    td_result.rss = res.rus.ru_maxrss;
-    td_result.time = ToUs(res.rus.ru_utime) + ToUs(res.rus.ru_stime);
+    td_result.vss = cjail_res.stats.hiwater_vm;
+    td_result.rss = cjail_res.rus.ru_maxrss;
+    td_result.time = ToUs(cjail_res.rus.ru_utime) + ToUs(cjail_res.rus.ru_stime);
     td_result.score = 0;
   } else {
-    td_result.vss = std::max(td_result.vss, (int64_t)res.stats.hiwater_vm);
-    td_result.rss = std::max(td_result.rss, (int64_t)res.rus.ru_maxrss);
-    td_result.time += ToUs(res.rus.ru_utime) + ToUs(res.rus.ru_stime);
+    td_result.vss = std::max(td_result.vss, (int64_t)cjail_res.stats.hiwater_vm);
+    td_result.rss = std::max(td_result.rss, (int64_t)cjail_res.rus.ru_maxrss);
+    td_result.time += ToUs(cjail_res.rus.ru_utime) + ToUs(cjail_res.rus.ru_stime);
   }
-  if (res.timekill == -1) {
+  if (cjail_res.timekill == -1) {
     // timekill = -1 means SandboxExec error (see sandbox_exec.cpp, sandbox_main.cpp)
     td_result.verdict = Verdict::EE;
-  } else if (res.oomkill > 0) {
+  } else if (cjail_res.oomkill > 0) {
     // oomkill = -1 means failed to read oom (see cjail/cjail.h)
     td_result.verdict = Verdict::MLE;
-  } else if (res.timekill) {
+  } else if (cjail_res.timekill) {
     td_result.verdict = Verdict::TLE;
-  } else if (res.info.si_code == CLD_KILLED || res.info.si_code == CLD_DUMPED) {
-    if (res.info.si_status == SIGXFSZ || (sub.sandbox_strict && res.info.si_status == SIGPIPE)) {
+  } else if (cjail_res.info.si_code == CLD_KILLED || cjail_res.info.si_code == CLD_DUMPED) {
+    if (cjail_res.info.si_status == SIGXFSZ || (sub.sandbox_strict && cjail_res.info.si_status == SIGPIPE)) {
       td_result.verdict = Verdict::OLE;
     } else if ((lim.vss && td_result.vss > lim.vss) || (lim.rss && td_result.rss > lim.rss)) {
       // MLE will likely cause SIGSEGV or std::bad_alloc (SIGABRT), so we check it before SIG
@@ -340,7 +350,7 @@ void FinalizeExecute(Submission& sub, const TaskEntry& task, const struct cjail_
     }
   } else if ((lim.vss && td_result.vss > lim.vss) || (lim.rss && td_result.rss > lim.rss)) {
     td_result.verdict = Verdict::MLE;
-  } else if (res.info.si_status != 0) {
+  } else if (cjail_res.info.si_status != 0) {
     td_result.verdict = Verdict::RE;
   } else if (td_result.time > lim.time) {
     td_result.verdict = Verdict::TLE;
@@ -348,27 +358,33 @@ void FinalizeExecute(Submission& sub, const TaskEntry& task, const struct cjail_
     td_result.verdict = Verdict::NUL;
   }
   spdlog::info("Execute finished: id={} subtask={} stage={} code={} status={} verdict={} time={} vss={} rss={}",
-               id, subtask, stage, res.info.si_code, res.info.si_status, VerdictToAbr(td_result.verdict),
+               id, subtask, stage, cjail_res.info.si_code, cjail_res.info.si_status, VerdictToAbr(td_result.verdict),
                td_result.time, td_result.vss, td_result.rss);
 }
 
-void FinalizeScoring(Submission& sub, const TaskEntry& task, const struct cjail_result& res);
+void FinalizeScoring(SubmissionAndResult& sub_and_result, const TaskEntry& task, const struct cjail_result& res);
 
-bool SetupScoring(Submission& sub, const TaskEntry& task) {
-  if (sub.verdict != Verdict::NUL) return false; // CE check
+bool SetupScoring(SubmissionAndResult& sub_and_result, const TaskEntry& task) {
+  const Submission& sub = sub_and_result.sub;
+  SubmissionResult& res = sub_and_result.result;
+
+  if (res.verdict != Verdict::NUL) return false; // CE check
   long id = sub.submission_internal_id;
   int subtask = task.task.subtask;
   int stage = task.task.stage;
   if (IsCancelled(id, sub.testdata[subtask].td_groups)) return false; // cancellation check
 
   bool last_stage = stage == sub.stages - 1;
-  const auto& td_result = sub.td_results[subtask];
-  // if already TLE/MLE/etc, do not invoke old-style special judge
+  auto& td_result = res.td_results[subtask];
   // if specjudge demends skip, skip anyway
-  if (td_result.skip_stage ||
-      (td_result.verdict != Verdict::NUL &&
-       sub.specjudge_type != SpecjudgeType::SPECJUDGE_NEW)) {
-    if (last_stage && sub.reporter) sub.reporter->ReportScoringResult(sub, subtask);
+  if (td_result.skip_stage) return false;
+  // if already TLE/MLE/etc, do not invoke old-style special judge
+  if (td_result.verdict != Verdict::NUL &&
+      sub.specjudge_type != SpecjudgeType::SPECJUDGE_NEW) {
+    if (sub.reporter.ReportScoringResult && (sub.report_intermediate_stage || last_stage)) {
+      sub.reporter.ReportScoringResult(sub, res, subtask, stage);
+    }
+    if (!last_stage) td_result.skip_stage = true;
     return false;
   }
   CreateDirs(Workdir(ScoringBoxPath(id, subtask, stage)), fs::perms::all);
@@ -376,7 +392,7 @@ bool SetupScoring(Submission& sub, const TaskEntry& task) {
     auto user_output = ExecuteBoxFinalOutput(id, subtask, stage);
     if (sub.specjudge_type == SpecjudgeType::SKIP) {
       Move(user_output, ScoringBoxOutput(id, subtask, stage));
-      FinalizeScoring(sub, task, {});
+      FinalizeScoring(sub_and_result, task, {});
       return false;
     }
     auto scoring_user_output = ScoringBoxUserOutput(id, subtask, stage);
@@ -400,23 +416,26 @@ bool SetupScoring(Submission& sub, const TaskEntry& task) {
   Copy(specjudge_prog, ScoringBoxProgram(id, subtask, stage, sub.specjudge_lang), fs::perms::all);
   { // write meta file
     std::ofstream fout(ScoringBoxMetaFile(id, subtask, stage));
-    fout << sub.TestdataMeta(subtask, stage);
+    fout << sub_and_result.TestdataMeta(subtask, stage);
   }
   return true;
 }
 
-void FinalizeScoring(Submission& sub, const TaskEntry& task, const struct cjail_result& res) {
+void FinalizeScoring(SubmissionAndResult& sub_and_result, const TaskEntry& task, const struct cjail_result& cjail_res) {
+  const Submission& sub = sub_and_result.sub;
+  SubmissionResult& sub_res = sub_and_result.result;
+
   long id = sub.submission_internal_id;
   int subtask = task.task.subtask;
   int stage = task.task.stage;
-  auto& td_result = sub.td_results[subtask];
+  auto& td_result = sub_res.td_results[subtask];
   auto output_path = ScoringBoxOutput(id, subtask, stage);
 
   bool last_stage = stage == sub.stages - 1;
   // default: WA or keep verdict (if TLE etc.) for last_stage,
   //          continue otherwise
   td_result.score = 0;
-  if (!fs::is_regular_file(output_path) || res.info.si_status != 0) {
+  if (!fs::is_regular_file(output_path) || cjail_res.info.si_status != 0) {
     // skip remaining stages
     if (td_result.verdict == Verdict::NUL) td_result.verdict = Verdict::WA;
   } else if (sub.specjudge_type == SpecjudgeType::SPECJUDGE_OLD) {
@@ -528,32 +547,37 @@ void FinalizeScoring(Submission& sub, const TaskEntry& task, const struct cjail_
     spdlog::info("Scoring finished: id={} subtask={} verdict={} score={} time={} vss={} rss={}",
                  id, subtask, VerdictToAbr(td_result.verdict),
                  td_result.score, td_result.time, td_result.vss, td_result.rss);
-    if (last_stage && sub.reporter) sub.reporter->ReportScoringResult(sub, subtask);
+    if (sub.reporter.ReportScoringResult &&
+        (sub.report_intermediate_stage || last_stage || td_result.skip_stage)) {
+      sub.reporter.ReportScoringResult(sub, sub_res, subtask, stage);
+    }
   }
 }
 
 /// Submission tasks env teardown
-void FinalizeSubmission(Submission& sub, const TaskEntry& task) {
+void FinalizeSubmission(SubmissionAndResult& sub_and_result, const TaskEntry& task) {
+  const Submission& sub = sub_and_result.sub;
+  SubmissionResult& res = sub_and_result.result;
   long id = sub.submission_internal_id;
   if (sub.remove_submission) RemoveAll(SubmissionCodePath(id));
   RemoveAll(SubmissionRunPath(id));
-  if (sub.verdict == Verdict::NUL) {
-    sub.verdict = Verdict::AC;
-    for (size_t i = 0; i < sub.td_results.size(); i++) {
+  if (res.verdict == Verdict::NUL) {
+    res.verdict = Verdict::AC;
+    for (size_t i = 0; i < res.td_results.size(); i++) {
       if (sub.testdata[i].ignore_verdict) continue;
-      auto& td = sub.td_results[i];
-      if ((int)sub.verdict < (int)td.verdict) sub.verdict = td.verdict;
+      auto& td = res.td_results[i];
+      if ((int)res.verdict < (int)td.verdict) res.verdict = td.verdict;
     }
   }
   if (auto it = cancelled_list.find(id); it != cancelled_list.end()) {
     // cancelled, don't send anything to server
     cancelled_list.erase(it);
   } else {
-    if (sub.reporter) sub.reporter->ReportOverallResult(sub);
+    if (sub.reporter.ReportOverallResult) sub.reporter.ReportOverallResult(sub, res);
   }
   cancelled_group.erase(id);
   spdlog::info("Submission finished: id={} sub_id={} list_size={}", id, sub.submission_id, submission_list.size());
-  if (sub.reporter) sub.reporter->ReportFinalized(sub, submission_list.size());
+  if (sub.reporter.ReportFinalized) sub.reporter.ReportFinalized(sub, res, submission_list.size());
   submission_id_map.erase(id);
   submission_list.erase(id);
 }
@@ -564,7 +588,7 @@ void FinalizeTask(long id, const struct cjail_result& res, bool skipped = false)
   spdlog::info("Finalizing task: id={} taskid={} tasktype={} subtask={} stage={} skipped={}",
                entry.submission_internal_id, id, TaskTypeName(entry.task.type), entry.task.subtask, entry.task.stage, skipped);
   if (!skipped) {
-    auto& sub = submission_list[entry.submission_internal_id];
+    auto& sub = submission_list.at(entry.submission_internal_id);
     switch (entry.task.type) {
       case TaskType::COMPILE: FinalizeCompile(sub, entry, res); break;
       case TaskType::EXECUTE: FinalizeExecute(sub, entry, res); break;
@@ -577,7 +601,7 @@ void FinalizeTask(long id, const struct cjail_result& res, bool skipped = false)
 
 bool DispatchTask(long id) {
   auto& entry = task_list[id];
-  auto& sub = submission_list[entry.submission_internal_id];
+  auto& sub = submission_list.at(entry.submission_internal_id);
   spdlog::info("Dispatching task: id={} taskid={} tasktype={} subtask={} stage={}",
                entry.submission_internal_id, id, TaskTypeName(entry.task.type), entry.task.subtask, entry.task.stage);
   bool res = false;
@@ -591,7 +615,7 @@ bool DispatchTask(long id) {
     FinalizeTask(id, {}, true);
     return false;
   }
-  int handle = RunTask(submission_list[entry.submission_internal_id], entry.task);
+  int handle = RunTask(submission_list.at(entry.submission_internal_id), entry.task);
   handle_map[handle] = id;
   return true;
 }
@@ -642,7 +666,7 @@ std::vector<int> GetQueuedSubmissionID() {
     std::lock_guard lck(task_mtx);
     for (auto& i : submission_list) {
       if (cancelled_list.count(i.first)) continue;
-      st.push_back(i.second.submission_id);
+      st.push_back(i.second.sub.submission_id);
     }
   }
   return st;

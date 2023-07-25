@@ -14,7 +14,7 @@ target_include_directories(libtioj
       ${PROJECT_SOURCE_DIR}/src/tioj
       ${PROJECT_BINARY_DIR}/include
 )
-target_link_libraries(libtioj PUBLIC ${TIOJ_DEPS} PRIVATE spdlog::spdlog fmt::fmt libseccomp::libseccomp)
+target_link_libraries(libtioj PUBLIC ${TIOJ_DEPS} PRIVATE spdlog::spdlog libseccomp::libseccomp)
 set_target_properties(libtioj PROPERTIES
   OUTPUT_NAME "tioj-only"
   PREFIX "lib"

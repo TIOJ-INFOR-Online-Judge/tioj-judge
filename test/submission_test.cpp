@@ -32,7 +32,7 @@ TEST_P(ExampleProblemOneSubmission, Sub) {
   kMaxParallel = param.parallel;
   SetUp(1, 5);
   AssertVerdictReporter reporter(Verdict::AC);
-  sub.reporter = &reporter;
+  sub.reporter = reporter.GetReporter();
   long id = SetupSubmission(sub, param.sub_id, param.lang, kTime, param.is_strict, param.code);
   PushSubmission(std::move(sub));
   WorkLoop(false);

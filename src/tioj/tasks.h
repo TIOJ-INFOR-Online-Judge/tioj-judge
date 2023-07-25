@@ -16,7 +16,7 @@ struct Task {
 //  and provide an asynchronous interface to deal with tasks.
 
 // RunTask returns a handle to obtain result
-int RunTask(const Submission&, const Task&);
+int RunTask(const SubmissionAndResult&, const Task&);
 
 // return (handle, result); handle = -1 if error
 std::pair<int, struct cjail_result> WaitAnyResult();

@@ -18,8 +18,8 @@ extern size_t kMaxQueue;
 void TryFetchSubmission();
 
 // These functions will push the request into queue and return immediately
-void SendResult(const Submission&, int subtask);
-void SendFinalResult(const Submission&);
+void SendResult(const Submission&, const SubmissionResult&, int subtask);
+void SendFinalResult(const Submission&, const SubmissionResult&);
 void SendStatus(int submission_id, const std::string&); // "Validating" or "queued"
 void SendQueuedSubmissions(bool send_if_empty);
 

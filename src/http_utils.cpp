@@ -1,5 +1,5 @@
 #include "http_utils.h"
-#include <fmt/ranges.h>
+#include <spdlog/fmt/bundled/ranges.h>
 
 namespace http_utils {
 

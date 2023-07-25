@@ -11,7 +11,7 @@ TEST_F(ExampleProblem, SpecjudgeOldProblemOneSubmission) {
   kMaxParallel = 2;
   SetUp(2, 3);
   AssertVerdictReporter reporter(Verdict::AC);
-  sub.reporter = &reporter;
+  sub.reporter = reporter.GetReporter();
   sub.judge_between_stages = true;
   long id = SetupSubmission(sub, 5, Compiler::GCC_CPP_17, kTime, true, R"(#include <cstdio>
 int main(){ int a; scanf("%d",&a);printf("%d",12345); })", SpecjudgeType::SPECJUDGE_OLD, R"(#include <cstdio>
@@ -26,7 +26,7 @@ TEST_F(ExampleProblem, SpecjudgeNewProblemOneSubmission) {
   kMaxParallel = 2;
   SetUp(3, 3);
   AssertVerdictReporter reporter(Verdict::AC);
-  sub.reporter = &reporter;
+  sub.reporter = reporter.GetReporter();
   sub.judge_between_stages = true;
   long id = SetupSubmission(sub, 6, Compiler::GCC_CPP_17, kTime, true, R"(#include <cstdio>
 int main(){ int a; scanf("%d",&a);printf("%d",12345); })", SpecjudgeType::SPECJUDGE_NEW, R"(#include <iostream>
@@ -41,7 +41,7 @@ TEST_F(ExampleProblem, Multistage) {
   kMaxParallel = 2;
   SetUp(4, 2);
   AssertVerdictReporter reporter(Verdict::AC);
-  sub.reporter = &reporter;
+  sub.reporter = reporter.GetReporter();
   sub.stages = 3;
   long id = SetupSubmission(sub, 7, Compiler::GCC_CPP_17, kTime, false, R"(#include <cstdio>
 int main(int argc, char** argv){ int a; scanf("%d",&a); printf("%d", a+argv[1][0]-'1'); })");
@@ -54,7 +54,7 @@ TEST_F(ExampleProblem, MultistageTL) {
   kMaxParallel = 2;
   SetUp(4, 2);
   AssertVerdictReporter reporter(Verdict::TLE);
-  sub.reporter = &reporter;
+  sub.reporter = reporter.GetReporter();
   sub.stages = 3;
   long id = SetupSubmission(sub, 8, Compiler::GCC_CPP_17, kTime, false, R"(#include <ctime>
 int main(int argc, char** argv){ auto a = clock(); while (clock()-a<0.6*CLOCKS_PER_SEC); })",
@@ -74,7 +74,7 @@ TEST_F(ExampleProblem, MultistageSpecjudgeNew) {
   kMaxParallel = 2;
   SetUp(4, 2);
   AssertVerdictReporter reporter(Verdict::AC);
-  sub.reporter = &reporter;
+  sub.reporter = reporter.GetReporter();
   sub.stages = 3;
   sub.judge_between_stages = true;
   // add stage+1 in execute; subtract it back in specjudge
@@ -111,7 +111,7 @@ TEST_F(ExampleProblem, MultistageSpecjudgeNewSkip) {
   kMaxParallel = 2;
   SetUp(4, 2);
   AssertVerdictReporter reporter(Verdict::AC);
-  sub.reporter = &reporter;
+  sub.reporter = reporter.GetReporter();
   sub.stages = 3;
   sub.judge_between_stages = true;
   // TODO: check it only executes one stage
@@ -127,7 +127,7 @@ TEST_F(ExampleProblem, MultistageSpecjudgeOld) {
   kMaxParallel = 2;
   SetUp(4, 2);
   AssertVerdictReporter reporter(Verdict::AC);
-  sub.reporter = &reporter;
+  sub.reporter = reporter.GetReporter();
   sub.stages = 3;
   sub.judge_between_stages = true;
   // same as MultistageSpecjudgeNew
@@ -162,7 +162,7 @@ TEST_F(ExampleProblem, MultistageSpecjudgeOldWA) {
   kMaxParallel = 2;
   SetUp(4, 2);
   AssertVerdictReporter reporter(Verdict::WA);
-  sub.reporter = &reporter;
+  sub.reporter = reporter.GetReporter();
   sub.stages = 3;
   sub.judge_between_stages = true;
   // TODO: check it only executes one stage

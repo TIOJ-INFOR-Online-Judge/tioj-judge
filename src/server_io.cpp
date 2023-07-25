@@ -9,8 +9,8 @@
 
 #include <zstd.h>
 #include <httplib.h>
-#include <fmt/core.h>
-#include <fmt/ranges.h>
+#include <spdlog/fmt/bundled/core.h>
+#include <spdlog/fmt/bundled/ranges.h>
 #include <nlohmann/json.hpp>
 
 #include "paths.h"
@@ -255,28 +255,23 @@ void RequestLoop() {
 }
 
 /// --- reporter ---
-class ServerReporter : public Reporter {
- public:
-  // these functions should not block
-  void ReportStartCompiling(const Submission& sub) override {
+Submission::Reporter server_reporter = {
+  .ReportStartCompiling = [](const Submission& sub, const SubmissionResult&) {
     SendStatus(sub.submission_id, "Validating");
-  }
-  void ReportOverallResult(const Submission& sub) override {
-    SendFinalResult(sub);
-  }
-  void ReportScoringResult(const Submission& sub, int subtask) override {
-    SendResult(sub, subtask);
-  }
-  void ReportCEMessage(const Submission&) override {
-    // do nothing; ReportOverallResult will send the message
-    // we do this because it is possible that a submission get both CE and ER message,
-    //  so it is better to send it after completion
-  }
-  void ReportERMessage(const Submission&) override {}
-  void ReportFinalized(const Submission&, size_t queue_size_before_pop) override {
+  },
+  .ReportOverallResult = [](const Submission& sub, const SubmissionResult& res) {
+    SendFinalResult(sub, res);
+  },
+  .ReportScoringResult = [](const Submission& sub, const SubmissionResult& res, int subtask, int) {
+    SendResult(sub, res, subtask);
+  },
+  // no ReportCE/ERMessage; ReportOverallResult will send the message
+  // we do this because it is possible that a submission gets both CE and ER message,
+  //  so it is better to send it after completion
+  .ReportFinalized = [](const Submission&, const SubmissionResult&, size_t queue_size_before_pop) {
     if (queue_size_before_pop == kMaxQueue) TryFetchSubmission();
-  }
-} server_reporter;
+  },
+};
 
 // --- helpers ---
 template <class Method, class... T>
@@ -546,7 +541,7 @@ bool DealOneSubmission(nlohmann::json&& data) {
   }
   // finalize & push
   sub.submission_internal_id = GetUniqueSubmissionInternalId();
-  sub.reporter = &server_reporter;
+  sub.reporter = server_reporter;
   sub.remove_submission = true;
   CreateDirs(SubmissionCodePath(sub.submission_internal_id));
   Move(tempdir.UserCodePath(), SubmissionUserCode(sub.submission_internal_id));
@@ -561,7 +556,7 @@ bool DealOneSubmission(nlohmann::json&& data) {
   return true;
 }
 
-nlohmann::json OneTdJSON(const Submission::TestdataResult& nowtd, int position) {
+nlohmann::json OneTdJSON(const SubmissionResult::TestdataResult& nowtd, int position) {
   nlohmann::json tddata{
       {"position", position},
       {"verdict", VerdictToAbr(nowtd.verdict)},
@@ -580,16 +575,16 @@ nlohmann::json OneTdJSON(const Submission::TestdataResult& nowtd, int position) 
   return tddata;
 }
 
-nlohmann::json TdResultsJSON(const Submission& sub, int subtask = -1) {
+nlohmann::json TdResultsJSON(const SubmissionResult& res, int subtask = -1) {
   nlohmann::json tds = nlohmann::json::array();
   if (subtask == -1) {
-    for (size_t i = 0; i < sub.td_results.size(); i++) {
-      auto& nowtd = sub.td_results[i];
+    for (size_t i = 0; i < res.td_results.size(); i++) {
+      auto& nowtd = res.td_results[i];
       if (nowtd.verdict == Verdict::NUL) continue;
       tds.push_back(OneTdJSON(nowtd, i));
     }
   } else {
-    tds.push_back(OneTdJSON(sub.td_results[subtask], subtask));
+    tds.push_back(OneTdJSON(res.td_results[subtask], subtask));
   }
   return tds;
 }
@@ -604,10 +599,10 @@ void TryFetchSubmission() {
   PushRequest(std::move(req));
 }
 
-void SendResult(const Submission& sub, int subtask) {
+void SendResult(const Submission& sub, const SubmissionResult& res, int subtask) {
   nlohmann::json data;
   data["submission_id"] = sub.submission_id;
-  data["results"] = TdResultsJSON(sub, subtask);
+  data["results"] = TdResultsJSON(res, subtask);
   Request req{};
   req.is_unique = true;
   req.key = sub.submission_id;
@@ -616,14 +611,14 @@ void SendResult(const Submission& sub, int subtask) {
   PushRequest(std::move(req));
 }
 
-void SendFinalResult(const Submission& sub) {
-  nlohmann::json data{{"submission_id", sub.submission_id}, {"verdict", VerdictToAbr(sub.verdict)}};
-  if (sub.verdict == Verdict::CE || sub.verdict == Verdict::CLE) {
-    data["message"] = sub.ce_message;
-  } else if (sub.verdict == Verdict::ER) {
-    data["message"] = sub.er_message;
+void SendFinalResult(const Submission& sub, const SubmissionResult& res) {
+  nlohmann::json data{{"submission_id", sub.submission_id}, {"verdict", VerdictToAbr(res.verdict)}};
+  if (res.verdict == Verdict::CE || res.verdict == Verdict::CLE) {
+    data["message"] = res.ce_message;
+  } else if (res.verdict == Verdict::ER) {
+    data["message"] = res.er_message;
   } else {
-    data["td_results"] = TdResultsJSON(sub);
+    data["td_results"] = TdResultsJSON(res);
   }
   Request req{};
   req.force_pop = true;

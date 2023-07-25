@@ -3,7 +3,7 @@
 #include <unistd.h>
 #include <sys/wait.h>
 
-#include <fmt/ranges.h>
+#include <spdlog/fmt/bundled/ranges.h>
 #include <spdlog/spdlog.h>
 #include <tioj/paths.h>
 

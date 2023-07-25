@@ -77,7 +77,6 @@ A minimal working C++ example:
 #include <cstdio>
 #include <tioj/paths.h>
 #include <tioj/utils.h>
-#include <tioj/reporter.h>
 #include <tioj/submission.h>
 
 // Callbacks for judge results

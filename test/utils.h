@@ -3,10 +3,9 @@
 
 #include <gtest/gtest.h>
 #include <tioj/utils.h>
-#include <tioj/reporter.h>
 #include <tioj/submission.h>
 
-class AssertVerdictReporter : public Reporter {
+class AssertVerdictReporter {
   bool has_scoring_result_;
   bool has_overall_result_;
   bool require_scoring_;
@@ -24,18 +23,25 @@ class AssertVerdictReporter : public Reporter {
       expect_verdict(ver) {}
   ~AssertVerdictReporter() { AssertResult_(); }
 
-  void ReportStartCompiling(const Submission&) {}
-  void ReportOverallResult(const Submission& sub) {
-    ASSERT_EQ(sub.verdict, expect_verdict);
+  void ReportOverallResult(const SubmissionResult& res) {
+    ASSERT_EQ(res.verdict, expect_verdict);
     has_overall_result_ = true;
   }
-  void ReportScoringResult(const Submission& sub, int subtask) {
-    ASSERT_EQ(sub.td_results[subtask].verdict, expect_verdict);
+  void ReportScoringResult(const SubmissionResult& res, int subtask) {
+    ASSERT_EQ(res.td_results[subtask].verdict, expect_verdict);
     has_scoring_result_ = true;
   }
-  void ReportCEMessage(const Submission&) {}
-  void ReportERMessage(const Submission&) {}
-  void ReportFinalized(const Submission&, size_t) {}
+
+  Submission::Reporter GetReporter() {
+    Submission::Reporter reporter;
+    reporter.ReportOverallResult = [&](const Submission&, const SubmissionResult& res) {
+      ReportOverallResult(res);
+    };
+    reporter.ReportScoringResult = [&](const Submission&, const SubmissionResult& res, int subtask, int) {
+      ReportScoringResult(res, subtask);
+    };
+    return reporter;
+  }
 };
 
 long SetupSubmission(

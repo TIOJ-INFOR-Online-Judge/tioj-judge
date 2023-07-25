@@ -8,7 +8,7 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE Release)
 endif()
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall")
@@ -49,11 +49,7 @@ FetchContent_Declare(
 )
 FetchContent_Declare(
   spdlog
-  URL "https://github.com/gabime/spdlog/archive/refs/tags/v1.10.0.zip"
-)
-FetchContent_Declare(
-  fmt
-  URL "https://github.com/fmtlib/fmt/archive/refs/tags/8.1.1.zip"
+  URL "https://github.com/gabime/spdlog/archive/refs/tags/v1.12.0.zip"
 )
 FetchContent_Declare(
   json
@@ -89,7 +85,7 @@ endif()
 
 find_package(OpenSSL REQUIRED)
 find_package(zstd REQUIRED)
-FetchContent_MakeAvailable_Exclude(spdlog fmt ini httplib websocketpp sqlite_orm argparse)
+FetchContent_MakeAvailable_Exclude(spdlog ini httplib websocketpp sqlite_orm argparse)
 
 # default scoring
 add_executable(default-scoring "tools/default-scoring.cpp")
@@ -118,7 +114,7 @@ add_subdirectory(src)
 file(GLOB JUDGE_SRC "src/*.cpp" "src/*.h")
 add_executable(tioj-judge ${JUDGE_SRC})
 target_link_libraries(
-    tioj-judge libtioj spdlog::spdlog fmt::fmt tortellini
+    tioj-judge libtioj spdlog::spdlog tortellini
     httplib::httplib websocketpp ${OPENSSL_LIBRARIES} zstd
     sqlite_orm::sqlite_orm argparse::argparse)
 install(TARGETS tioj-judge DESTINATION bin)

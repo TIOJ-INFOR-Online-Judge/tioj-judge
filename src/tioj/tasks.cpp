@@ -60,7 +60,8 @@ std::vector<std::string> ExecuteCommand(Compiler lang, const std::string& progra
 /// child
 // Invoke sandbox with correct settings
 // Results will be parsed in testsuite.cpp
-struct cjail_result RunCompile(const Submission& sub, const Task& task, int uid, int cpuid) {
+struct cjail_result RunCompile(const SubmissionAndResult& sub_and_result, const Task& task, int uid, int cpuid) {
+  const Submission& sub = sub_and_result.sub;
   long id = sub.submission_internal_id;
   CompileSubtask subtask = (CompileSubtask)task.subtask;
   spdlog::debug("Generating compile settings: id={} subid={}, subtask={}",
@@ -131,7 +132,8 @@ struct cjail_result RunCompile(const Submission& sub, const Task& task, int uid,
 }
 
 // TODO FEATURE(io-interactive): fork & run multiple cjails and merge them into one cjail_result
-struct cjail_result RunExecute(const Submission& sub, const Task& task, int uid, int cpuid) {
+struct cjail_result RunExecute(const SubmissionAndResult& sub_and_result, const Task& task, int uid, int cpuid) {
+  const Submission& sub = sub_and_result.sub;
   long id = sub.submission_internal_id;
   int subtask = task.subtask;
   int stage = task.stage;
@@ -149,7 +151,7 @@ struct cjail_result RunExecute(const Submission& sub, const Task& task, int uid,
   opt.uid = opt.gid = uid;
   long lim_time = lim.time;
   if (stage > 0) {
-    lim_time -= sub.td_results[subtask].time;
+    lim_time -= sub_and_result.result.td_results[subtask].time;
   }
   if (lim_time < 0) lim_time = 0;
   opt.wall_time = std::max(long(lim_time * 1.2), lim_time + 1'000'000);
@@ -201,7 +203,8 @@ struct cjail_result RunExecute(const Submission& sub, const Task& task, int uid,
   return ret;
 }
 
-struct cjail_result RunScoring(const Submission& sub, const Task& task, int uid, int cpuid) {
+struct cjail_result RunScoring(const SubmissionAndResult& sub_and_result, const Task& task, int uid, int cpuid) {
+  const Submission& sub = sub_and_result.sub;
   long id = sub.submission_internal_id;
   int subtask = task.subtask;
   int stage = task.stage;
@@ -288,7 +291,7 @@ bool Wait() {
 
 } // namespace
 
-int RunTask(const Submission& sub, const Task& task) {
+int RunTask(const SubmissionAndResult& sub, const Task& task) {
   if (task.type == TaskType::FINALIZE) return -1;
   if (!pool_init) InitPools();
   int pipefd[2];
@@ -328,7 +331,7 @@ int RunTask(const Submission& sub, const Task& task) {
   running[pipefd[0]] = {pid, uid, cpuid};
   FD_SET(pipefd[0], &running_fdset);
   spdlog::debug("Task type={} subtask={} of {} started, handle={} pid={} uid={} cpuid={}",
-                TaskTypeName(task.type), task.subtask, sub.submission_internal_id, pipefd[0], pid, uid, cpuid);
+                TaskTypeName(task.type), task.subtask, sub.sub.submission_internal_id, pipefd[0], pid, uid, cpuid);
   return pipefd[0];
 }
 

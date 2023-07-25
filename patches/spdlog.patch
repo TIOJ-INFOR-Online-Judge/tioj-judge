@@ -1,0 +1,26 @@
+diff -ruN a/include/spdlog/fmt/bundled/format.h b/include/spdlog/fmt/bundled/format.h
+--- a/include/spdlog/fmt/bundled/format.h	2023-07-08 14:12:25.000000000 +0000
++++ b/include/spdlog/fmt/bundled/format.h	2023-07-25 07:55:45.238639103 +0000
+@@ -2704,6 +2704,9 @@
+   }
+ }
+ 
++class bigint;
++FMT_CONSTEXPR20 int compare(const bigint& lhs, const bigint& rhs);
++
+ class bigint {
+  private:
+   // A bigint is stored as an array of bigits (big digits), with bigit at index
+diff -ruN a/include/spdlog/sinks/ansicolor_sink.h b/include/spdlog/sinks/ansicolor_sink.h
+--- a/include/spdlog/sinks/ansicolor_sink.h	2023-07-08 14:12:25.000000000 +0000
++++ b/include/spdlog/sinks/ansicolor_sink.h	2023-07-25 07:55:00.697412137 +0000
+@@ -81,7 +81,9 @@
+ 
+ private:
+     FILE *target_file_;
++public:
+     mutex_t &mutex_;
++private:
+     bool should_do_colors_;
+     std::unique_ptr<spdlog::formatter> formatter_;
+     std::array<std::string, level::n_levels> colors_;

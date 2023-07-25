@@ -4,10 +4,9 @@
 #include <string>
 #include <vector>
 #include <filesystem>
+#include <functional>
 
 #include <cjail/cjail.h>
-#include <nlohmann/json_fwd.hpp>
-#include "reporter.h"
 
 extern int kMaxParallel;
 extern cpu_set_t kPinnedCpus;
@@ -79,6 +78,8 @@ enum class Verdict {
 #undef X
 };
 
+class SubmissionResult;
+
 class Submission {
  public:
   // use for submission file management; must be unique in a run even if in the case of rejudge
@@ -116,6 +117,39 @@ class Submission {
   std::vector<TestdataItem> testdata;
   bool skip_group; // skip a group of testdata if any of them got non-AC
 
+  // judge behavior
+  struct Reporter {
+    // these functions should not block
+    std::function<void(const Submission&, const SubmissionResult&)> ReportStartCompiling;
+    std::function<void(const Submission&, const SubmissionResult&)> ReportOverallResult;
+    std::function<void(const Submission&, const SubmissionResult&, int subtask, int stage)> ReportScoringResult;
+    std::function<void(const Submission&, const SubmissionResult&)> ReportCEMessage;
+    std::function<void(const Submission&, const SubmissionResult&)> ReportERMessage;
+    std::function<void(const Submission&, const SubmissionResult&, size_t queue_size_before_pop)> ReportFinalized;
+  };
+  Reporter reporter; // callbacks for result reporting
+  bool report_intermediate_stage; // whether to call ReportScoringResult in intermediate stages
+  bool remove_submission; // remove submission code after judge
+
+  Submission() :
+      submission_id(0),
+      contest_id(0),
+      submission_time(0),
+      submitter_id(0),
+      lang(Compiler::GCC_CPP_17),
+      problem_id(0),
+      specjudge_type(SpecjudgeType::NORMAL),
+      interlib_type(InterlibType::NONE),
+      specjudge_lang(Compiler::GCC_CPP_17),
+      stages(1),
+      judge_between_stages(false),
+      sandbox_strict(false),
+      report_intermediate_stage(false),
+      remove_submission(true) {}
+};
+
+class SubmissionResult {
+ public:
   // task result
   struct TestdataResult {
     struct cjail_result execute_result;
@@ -133,28 +167,8 @@ class Submission {
   // overall result
   Verdict verdict;
   std::string ce_message, er_message;
-  // judge behavior
-  Reporter* reporter; // callbacks for result reporting
-  bool remove_submission; // remove submission code after judge
 
-  Submission() :
-      submission_id(0),
-      contest_id(0),
-      submission_time(0),
-      submitter_id(0),
-      lang(Compiler::GCC_CPP_17),
-      problem_id(0),
-      specjudge_type(SpecjudgeType::NORMAL),
-      interlib_type(InterlibType::NONE),
-      specjudge_lang(Compiler::GCC_CPP_17),
-      stages(1),
-      judge_between_stages(false),
-      sandbox_strict(false),
-      verdict(Verdict::NUL),
-      reporter(nullptr),
-      remove_submission(true) {}
-
-  nlohmann::json TestdataMeta(int subtask, int stage) const;
+  SubmissionResult() : verdict(Verdict::NUL) {}
 };
 
 // Call from main thread
@@ -165,7 +179,7 @@ size_t CurrentSubmissionQueueSize();
 // External ID, for server communication
 std::vector<int> GetQueuedSubmissionID();
 
-// Called from another thread
+// Called from any thread
 // 0 = no limit; return false only if queue size exceeded
 bool PushSubmission(Submission&&, size_t max_queue = 0);
 
