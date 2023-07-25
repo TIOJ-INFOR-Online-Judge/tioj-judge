@@ -137,7 +137,7 @@ struct cjail_result RunExecute(const Submission& sub, const Task& task, int uid,
   int stage = task.stage;
   spdlog::debug("Generating execute settings: id={} subid={}, subtask={} stage={}",
       id, sub.submission_id, subtask, stage);
-  auto& lim = sub.td_limits[subtask];
+  auto& lim = sub.testdata[subtask];
   std::string program = ExecuteBoxProgram(-1, -1, -1, sub.lang, true);
 
   SandboxOptions opt;

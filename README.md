@@ -102,26 +102,23 @@ int main() {
   sub.specjudge_type = SpecjudgeType::NORMAL;
   sub.interlib_type = InterlibType::NONE;
   for (int i = 0; i < num_td; i++) {
-    Submission::TestdataLimit limit;
-    limit.vss = 65536; // 64 KiB
-    limit.rss = 0;
-    limit.output = 65536;
-    limit.time = 1000000; // 1 sec
-    sub.td_limits.push_back(limit);
+    // submission files & limits
+    Submission::TestdataItem td;
+    td.input_file = "/path/to/input";
+    td.answer_file = "/path/to/output";
+    td.vss = 65536; // 64 KiB
+    td.rss = 0;
+    td.output = 65536;
+    td.time = 1000000; // 1 sec
+    sub.testdata.push_back(td);
   }
   sub.remove_submission = true;
   sub.reporter = &reporter;
   { // submission files
-    // mkdir TdPath(problem_id)
-    for (int td = 0; td < num_td; td++) {
-      // write input of testdata #td into TdInput(problem_id, td);
-      // write answer of testdata #td into TdOutput(problem_id, td);
-    }
     // mkdir SubmissionCodePath(sub.submission_internal_id)
     // write submission code into SubmissionUserCode(sub.submission_internal_id)
-
-    // note that submission code / testdata files can be symbolic links
   }
+  // note that all paths can be symbolic links
   PushSubmission(std::move(sub));
   WorkLoop(false); // keep judging until all submissions in the queue are finished
 }

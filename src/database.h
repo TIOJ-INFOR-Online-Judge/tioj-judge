@@ -3,7 +3,7 @@
 
 #include <sqlite_orm/sqlite_orm.h>
 #include "tioj/utils.h"
-#include "tioj/paths.h"
+#include "paths.h"
 
 // TODO FEATURE(web-refactor): add td limits
 struct Testdata {
@@ -18,7 +18,7 @@ struct Testdata {
 namespace {
 
 fs::path DatabasePath() {
-  return kDataDir / "db.sqlite";
+  return kTestdataRoot / "db.sqlite";
 }
 
 inline auto InitStorage() {

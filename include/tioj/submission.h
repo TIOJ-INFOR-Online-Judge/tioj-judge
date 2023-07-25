@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include <filesystem>
 
 #include <cjail/cjail.h>
 #include <nlohmann/json_fwd.hpp>
@@ -90,6 +91,7 @@ class Submission {
   int submitter_id;
   std::string submitter_name, submitter_nickname;
   Compiler lang;
+
   // problem information
   int problem_id;
   SpecjudgeType specjudge_type;
@@ -99,15 +101,19 @@ class Submission {
   bool judge_between_stages;
   bool sandbox_strict; // false for backward-compatability
   std::vector<std::string> default_scoring_args;
+
   // task information
-  struct TestdataLimit {
+  struct TestdataItem {
+    // files
+    std::filesystem::path input_file, answer_file;
+    // limits
+    // vss & rss & output can be zero if unlimited; time must always be set
     int64_t vss, rss, output; // KiB
     int64_t time; // us
-    // vss & rss & output can be zero if unlimited; time must always be set
-    bool ignore_verdict;
+    bool ignore_verdict; // ignore this testdata in overall verdict calculation
+    std::vector<int> td_groups; // which groups it belongs to
   };
-  std::vector<TestdataLimit> td_limits;
-  std::vector<std::vector<int>> td_groups;
+  std::vector<TestdataItem> testdata;
   bool skip_group; // skip a group of testdata if any of them got non-AC
 
   // task result

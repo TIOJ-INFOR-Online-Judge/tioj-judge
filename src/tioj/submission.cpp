@@ -32,7 +32,7 @@ inline long ToUs(const struct timeval& v) {
 
 nlohmann::json Submission::TestdataMeta(int subtask, int stage) const {
   const struct cjail_result& res = td_results[subtask].execute_result;
-  const TestdataLimit& lim = td_limits[subtask];
+  const TestdataItem& lim = testdata[subtask];
   const TestdataResult& td_result = td_results[subtask];
   return {
     {"input_file", ScoringBoxTdInput(-1, -1, -1, true)},
@@ -251,7 +251,7 @@ bool SetupExecute(const Submission& sub, const TaskEntry& task) {
   long id = sub.submission_internal_id;
   int subtask = task.task.subtask;
   int stage = task.task.stage;
-  if (IsCancelled(id, sub.td_groups[subtask])) return false; // cancellation check
+  if (IsCancelled(id, sub.testdata[subtask].td_groups)) return false; // cancellation check
 
   auto& td_result = sub.td_results[subtask];
   if (stage > 0 && (td_result.skip_stage || td_result.verdict != Verdict::NUL)) return false;
@@ -261,8 +261,8 @@ bool SetupExecute(const Submission& sub, const TaskEntry& task) {
     // TODO FEATURE(io-interactive): create FIFOs outside of workdir by hardlink
     long tmpfs_size_kib =
       (fs::file_size(CompileBoxOutput(id, CompileSubtask::USERPROG, sub.lang)) / 4096 + 1) * 4 +
-      (fs::file_size(TdInput(sub.problem_id, subtask)) / 4096 + 1) * 4 +
-      std::min(sub.td_limits[subtask].output * 2, kMaxOutput);
+      (fs::file_size(sub.testdata[subtask].input_file) / 4096 + 1) * 4 +
+      std::min(sub.testdata[subtask].output * 2, kMaxOutput);
     MountTmpfs(workdir, tmpfs_size_kib);
   }
   auto prog = ExecuteBoxProgram(id, subtask, stage, sub.lang);
@@ -273,7 +273,7 @@ bool SetupExecute(const Submission& sub, const TaskEntry& task) {
     CreateDirs(ExecuteBoxTdStrictPath(id, subtask, stage), fs::perms::owner_all); // 700
     if (stage == 0) {
       std::lock_guard lck(td_file_lock[sub.problem_id]);
-      Copy(TdInput(sub.problem_id, subtask), input_file,
+      Copy(sub.testdata[subtask].input_file, input_file,
           fs::perms::owner_read | fs::perms::owner_write); // 600
     } else {
       Move(ExecuteBoxFinalOutput(id, subtask, stage - 1), input_file);
@@ -283,7 +283,7 @@ bool SetupExecute(const Submission& sub, const TaskEntry& task) {
     fs::permissions(workdir, fs::perms::all);
     if (stage == 0) {
       std::lock_guard lck(td_file_lock[sub.problem_id]);
-      Copy(TdInput(sub.problem_id, subtask), input_file, kPerm666);
+      Copy(sub.testdata[subtask].input_file, input_file, kPerm666);
     } else {
       Move(ExecuteBoxFinalOutput(id, subtask, stage - 1), input_file);
       fs::permissions(input_file, kPerm666);
@@ -310,7 +310,7 @@ void FinalizeExecute(Submission& sub, const TaskEntry& task, const struct cjail_
   if (stage > 0) {
     RemoveAll(ExecuteBoxPath(id, subtask, stage - 1));
   }
-  auto& lim = sub.td_limits[subtask];
+  auto& lim = sub.testdata[subtask];
   if (stage == 0) {
     td_result.vss = res.stats.hiwater_vm;
     td_result.rss = res.rus.ru_maxrss;
@@ -359,7 +359,7 @@ bool SetupScoring(Submission& sub, const TaskEntry& task) {
   long id = sub.submission_internal_id;
   int subtask = task.task.subtask;
   int stage = task.task.stage;
-  if (IsCancelled(id, sub.td_groups[subtask])) return false; // cancellation check
+  if (IsCancelled(id, sub.testdata[subtask].td_groups)) return false; // cancellation check
 
   bool last_stage = stage == sub.stages - 1;
   const auto& td_result = sub.td_results[subtask];
@@ -390,8 +390,8 @@ bool SetupScoring(Submission& sub, const TaskEntry& task) {
   }
   {
     std::lock_guard lck(td_file_lock[sub.problem_id]);
-    Copy(TdInput(sub.problem_id, subtask), ScoringBoxTdInput(id, subtask, stage), kPerm666);
-    Copy(TdOutput(sub.problem_id, subtask), ScoringBoxTdOutput(id, subtask, stage), kPerm666);
+    Copy(sub.testdata[subtask].input_file, ScoringBoxTdInput(id, subtask, stage), kPerm666);
+    Copy(sub.testdata[subtask].answer_file, ScoringBoxTdOutput(id, subtask, stage), kPerm666);
   }
   Copy(SubmissionUserCode(id), ScoringBoxCode(id, subtask, stage, sub.lang), kPerm666);
   // special judge program
@@ -511,7 +511,7 @@ void FinalizeScoring(Submission& sub, const TaskEntry& task, const struct cjail_
     td_result.verdict = Verdict::WA;
   }
   if (sub.skip_group && td_result.verdict != Verdict::NUL && td_result.verdict != Verdict::AC) {
-    const auto& groups = sub.td_groups[subtask];
+    const auto& groups = sub.testdata[subtask].td_groups;
     cancelled_group[id].insert(groups.begin(), groups.end());
   }
 
@@ -540,7 +540,7 @@ void FinalizeSubmission(Submission& sub, const TaskEntry& task) {
   if (sub.verdict == Verdict::NUL) {
     sub.verdict = Verdict::AC;
     for (size_t i = 0; i < sub.td_results.size(); i++) {
-      if (sub.td_limits[i].ignore_verdict) continue;
+      if (sub.testdata[i].ignore_verdict) continue;
       auto& td = sub.td_results[i];
       if ((int)sub.verdict < (int)td.verdict) sub.verdict = td.verdict;
     }
@@ -663,7 +663,7 @@ bool PushSubmission(Submission&& sub, size_t max_queue) {
   sub.stages = std::min(std::max(1, sub.stages), 32);
   int id = sub.submission_internal_id;
   long priority = sub.priority;
-  int num_tds = sub.td_limits.size();
+  int num_tds = sub.testdata.size();
   std::vector<int> td_order(num_tds);
   if (sub.skip_group) {
     // A simple greedy heuristic to try to skip a group as soon as possible
@@ -680,10 +680,10 @@ bool PushSubmission(Submission&& sub, size_t max_queue) {
       // Process testdata with more groups first
       std::stable_sort(
           scan_order.begin(), scan_order.end(),
-          [&sub](int a, int b) { return sub.td_groups[a].size() > sub.td_groups[b].size(); });
+          [&sub](int a, int b) { return sub.testdata[a].td_groups.size() > sub.testdata[b].td_groups.size(); });
       std::vector<std::unordered_set<int>> group_layers;
       for (int td : scan_order) {
-        auto& td_group = sub.td_groups[td];
+        auto& td_group = sub.testdata[td].td_groups;
         size_t pos = std::lower_bound(
             group_layers.begin(), group_layers.end(), true,
             [&td_group](const auto& layer, bool _) {

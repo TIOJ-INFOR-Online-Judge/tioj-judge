@@ -10,7 +10,7 @@
 - [ ] Output-only
     - Needs a lot of modifications on web server and API
 - [x] Optimize task result sending (not send every task result every time)
-- [ ] Refactor: add testdata path into `class Submission` and move related paths out of libtioj
+- [x] Refactor: add testdata path into `class Submission` and move related paths out of libtioj
 - [ ] Periodically clear testdata for recently unused problems
 - [ ] Add more languages
 - [ ] Add non-root judge (use libfakechroot for isolation; no RSS limiting & VSS reporting support)

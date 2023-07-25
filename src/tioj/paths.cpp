@@ -2,7 +2,10 @@
 
 fs::path kBoxRoot = "/tmp/tioj_box";
 fs::path kSubmissionRoot = "/tmp/tioj_submissions";
+
+namespace internal {
 fs::path kDataDir = fs::path(TIOJ_DATA_DIR);
+} // internal
 
 const char kWorkdirRelative[] = "workdir";
 fs::path Workdir(fs::path&& path) {
@@ -199,23 +202,11 @@ std::mutex& TdFileLock::operator[](int id) {
 }
 TdFileLock td_file_lock;
 
-fs::path TdRoot() {
-  return kDataDir / "testdata";
-}
-fs::path TdPath(int prob) {
-  return TdRoot() / PadInt(prob, 4);
-}
-fs::path TdInput(int prob, int td) {
-  return TdPath(prob) / ("input" + PadInt(td, 3));
-}
-fs::path TdOutput(int prob, int td) {
-  return TdPath(prob) / ("output" + PadInt(td, 3));
-}
 fs::path DefaultScoringPath() {
-  return kDataDir / "default-scoring";
+  return internal::kDataDir / "default-scoring";
 }
 fs::path SpecjudgeHeadersPath() {
-  return kDataDir / "judge-headers";
+  return internal::kDataDir / "judge-headers";
 }
 
 fs::path SubmissionCodePath(int id) {

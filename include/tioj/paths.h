@@ -9,7 +9,13 @@ namespace fs = std::filesystem;
 
 extern fs::path kBoxRoot;
 extern fs::path kSubmissionRoot;
+
+namespace internal {
+
+// does not meant to be publicly used; only for testing
 extern fs::path kDataDir;
+
+} // internal
 
 class TdFileLock {
   std::mutex global_lock_;
@@ -19,12 +25,6 @@ class TdFileLock {
   // TODO: free mutexes?
 };
 extern TdFileLock td_file_lock;
-
-// for testdata download
-fs::path TdRoot();
-fs::path TdPath(int prob);
-fs::path TdInput(int prob, int td);
-fs::path TdOutput(int prob, int td);
 
 // for submission fetch
 // TODO FEATURE(web-refactor): Specjudge & interlib code is bound with submission currently.

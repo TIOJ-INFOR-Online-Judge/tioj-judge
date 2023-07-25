@@ -10,6 +10,7 @@
 #include <argparse/argparse.hpp>
 
 #include <tioj/logger.h>
+#include "paths.h"
 #include "tioj/paths.h"
 #include "tioj/submission.h"
 #include "cpuset.h"
@@ -32,8 +33,10 @@ void ParseConfig(const fs::path& conf_path) {
   fin >> ini;
   std::string box_root = ini[""]["box_root"] | "";
   std::string submission_root = ini[""]["submission_root"] | "";
+  std::string testdata_root = ini[""]["testdata_root"] | "";
   if (box_root.size()) kBoxRoot = box_root;
   if (submission_root.size()) kSubmissionRoot = submission_root;
+  if (testdata_root.size()) kTestdataRoot = testdata_root;
   kMaxParallel = ini[""]["parallel"] | kMaxParallel;
   SetPinnedCPU(ini[""]["pinned_cpus"] | "none");
   kMaxRSS = (ini[""]["max_rss_per_task_mb"] | (kMaxRSS / 1024)) * 1024;
@@ -108,7 +111,7 @@ void ParseArgs(int argc, char** argv) {
 }
 
 bool LockFile() {
-  fs::path lock_file = kDataDir / "lock";
+  fs::path lock_file = kTestdataRoot / "lock";
   int fd = open(lock_file.c_str(), O_RDWR | O_CREAT, 0644);
   if (fd < 0) return false;
   struct flock lock{};

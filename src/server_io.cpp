@@ -13,6 +13,7 @@
 #include <fmt/ranges.h>
 #include <nlohmann/json.hpp>
 
+#include "paths.h"
 #include "database.h"
 #include "websocket.h"
 #include "http_utils.h"
@@ -30,7 +31,7 @@ const std::string kChannelIdentifier = "{\"channel\":\"FetchChannel\"}";
 
 /// --- paths & helpers ---
 fs::path TdPool() {
-  return kDataDir / "td-pool";
+  return kTestdataRoot / "td-pool";
 }
 fs::path TdPoolDir(long id) {
   return TdPool() / fmt::format("{:04d}", id / 100);
@@ -428,7 +429,7 @@ bool DealOneSubmission(nlohmann::json&& data) {
 
     // testdata & limits
     auto& td = data["td"];
-    sub.td_limits.resize(td.size(), Submission::TestdataLimit{});
+    sub.testdata.resize(td.size());
     td_count = td.size();
     {
       std::unordered_map<long, Testdata> orig_td;
@@ -456,7 +457,7 @@ bool DealOneSubmission(nlohmann::json&& data) {
         new_meta.insert({td.testdata_id, td});
 
         // limits
-        auto& lim = sub.td_limits[i];
+        auto& lim = sub.testdata[i];
         lim.time = td_item["time"].get<int64_t>();
         lim.vss = td_item["vss"].get<int64_t>();
         lim.rss = td_item["rss"].get<int64_t>();
@@ -467,6 +468,8 @@ bool DealOneSubmission(nlohmann::json&& data) {
           lim.vss = 0;
         }
         lim.ignore_verdict = td_item["verdict_ignore"].get<bool>();
+        lim.input_file = TdInput(sub.problem_id, i);
+        lim.answer_file = TdAnswer(sub.problem_id, i);
       }
       for (auto& i : orig_td) {
         if (!new_meta.count(i.first)) to_delete.push_back(i.first);
@@ -474,13 +477,12 @@ bool DealOneSubmission(nlohmann::json&& data) {
     }
 
     // tasks/groups
-    sub.td_groups.resize(td.size());
     auto& tasks = data["tasks"];
     {
       for (size_t i = 0; i < tasks.size(); i++) {
         auto& item = tasks[i];
         for (auto& td_pos : item["positions"]) {
-          sub.td_groups[td_pos.get<int>()].push_back(i);
+          sub.testdata[td_pos.get<int>()].td_groups.push_back(i);
         }
       }
     }
@@ -521,7 +523,7 @@ bool DealOneSubmission(nlohmann::json&& data) {
     CreateDirs(TdPath(sub.problem_id));
     for (auto [order, testdata_id] : to_update_position) {
       auto target_in = TdInput(sub.problem_id, order);
-      auto target_out = TdOutput(sub.problem_id, order);
+      auto target_out = TdAnswer(sub.problem_id, order);
       // ignore error (might not exist)
       fs::remove(target_in, ec);
       fs::remove(target_out, ec);
@@ -533,7 +535,7 @@ bool DealOneSubmission(nlohmann::json&& data) {
     // old symlinks
     for (int i = td_count; i < orig_td_count; i++) {
       fs::remove(TdInput(sub.problem_id, i), ec);
-      fs::remove(TdOutput(sub.problem_id, i), ec);
+      fs::remove(TdAnswer(sub.problem_id, i), ec);
     }
   }
   // update database meta

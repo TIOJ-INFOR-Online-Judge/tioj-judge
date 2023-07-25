@@ -21,7 +21,7 @@ struct cjail_result SandboxExec(const SandboxOptions& opt) {
     close(inpipe[1]);
     close(outpipe[0]);
     close(outpipe[1]);
-    auto cmd = kDataDir / "sandbox-exec";
+    auto cmd = internal::kDataDir / "sandbox-exec";
     if (execl(cmd.c_str(), cmd.c_str(), nullptr) < 0) _exit(1);
   }
   {
