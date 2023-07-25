@@ -40,6 +40,11 @@ class AssertVerdictReporter {
     reporter.ReportScoringResult = [&](const Submission&, const SubmissionResult& res, int subtask, int) {
       ReportScoringResult(res, subtask);
     };
+    reporter.ReportCEMessage = [&](const Submission&, const SubmissionResult& res) {
+      if (expect_verdict != Verdict::CE) {
+        EXPECT_TRUE(false) << "Unexpected CE message: " + res.ce_message;
+      }
+    };
     return reporter;
   }
 };

@@ -48,7 +48,8 @@ enum class InterlibType {
   X(GCC_C_17, "c17") \
   X(HASKELL, "haskell") \
   X(PYTHON2, "python2") \
-  X(PYTHON3, "python3")
+  X(PYTHON3, "python3") \
+  X(CUSTOM, "custom")
 enum class Compiler {
 #define X(name, compname) name,
   ENUM_COMPILER_
@@ -98,9 +99,11 @@ class Submission {
   SpecjudgeType specjudge_type;
   InterlibType interlib_type;
   Compiler specjudge_lang;
+  std::string user_compile_options, specjudge_compile_options;
   int stages;
   bool judge_between_stages;
   bool sandbox_strict; // false for backward-compatability
+  int process_limit;
   std::vector<std::string> default_scoring_args;
 
   // task information
@@ -144,6 +147,7 @@ class Submission {
       stages(1),
       judge_between_stages(false),
       sandbox_strict(false),
+      process_limit(1),
       report_intermediate_stage(false),
       remove_submission(true) {}
 };

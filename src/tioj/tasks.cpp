@@ -3,10 +3,11 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <unistd.h>
-#include <sys/sysinfo.h>
+#include <wordexp.h>
 #include <sys/wait.h>
-#include <numeric>
+#include <sys/sysinfo.h>
 #include <map>
+#include <numeric>
 #include <unordered_map>
 
 #include <spdlog/spdlog.h>
@@ -53,6 +54,7 @@ std::vector<std::string> ExecuteCommand(Compiler lang, const std::string& progra
     case Compiler::HASKELL: return {program};
     case Compiler::PYTHON2: return {"/usr/bin/env", "python2", program};
     case Compiler::PYTHON3: return {"/usr/bin/env", "python3", program};
+    case Compiler::CUSTOM: return {program};
   }
   __builtin_unreachable();
 }
@@ -112,7 +114,24 @@ struct cjail_result RunCompile(const SubmissionAndResult& sub_and_result, const 
       opt.command = {"/usr/bin/env", "python3", "-c", script};
       break;
     }
+    case Compiler::CUSTOM: {
+      // empty; use *_compile_options to specify
+      break;
+    }
     default: __builtin_unreachable();
+  }
+  { // add custom options
+    auto& additional_options = subtask == CompileSubtask::USERPROG ? sub.user_compile_options : sub.specjudge_compile_options;
+    if (additional_options.size()) {
+      setenv("INPUT", input.c_str(), 1);
+      setenv("OUTPUT", output.c_str(), 1);
+      if (wordexp_t args; wordexp(additional_options.c_str(), &args, WRDE_NOCMD) == 0) {
+        for (size_t i = 0; i < args.we_wordc; i++) opt.command.push_back(args.we_wordv[i]);
+        wordfree(&args);
+      }
+      unsetenv("INPUT");
+      unsetenv("OUTPUT");
+    }
   }
   if (char* path = getenv("PATH")) opt.envs.push_back(std::string("PATH=") + path);
   opt.workdir = Workdir("/");
@@ -162,7 +181,7 @@ struct cjail_result RunExecute(const SubmissionAndResult& sub_and_result, const 
   opt.rss = lim.rss + 1024;
   if (lim.rss == 0 || opt.rss > kMaxRSS) opt.rss = kMaxRSS;
   opt.vss = lim.vss ? lim.vss + 2048 : 0; // add some margin so we can determine whether it is MLE
-  opt.proc_num = 1;
+  opt.proc_num = sub.process_limit;
   // file limit is not needed since we have already limited the total size by mounting tmpfs
   opt.fsize = lim.output;
   if (opt.fsize == 0 || opt.fsize > kMaxOutput) opt.fsize = kMaxOutput;

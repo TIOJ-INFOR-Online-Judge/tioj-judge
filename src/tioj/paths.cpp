@@ -35,6 +35,7 @@ inline std::string CodeExtension(Compiler lang) {
     case Compiler::HASKELL: return ".hs";
     case Compiler::PYTHON2: [[fallthrough]];
     case Compiler::PYTHON3: return ".py";
+    case Compiler::CUSTOM: return "";
   }
   __builtin_unreachable();
 }
@@ -53,6 +54,7 @@ inline std::string ProgramExtension(Compiler lang) {
     case Compiler::HASKELL: return "";
     case Compiler::PYTHON2: [[fallthrough]];
     case Compiler::PYTHON3: return ".pyc";
+    case Compiler::CUSTOM: return "";
   }
   __builtin_unreachable();
 }
@@ -140,7 +142,8 @@ fs::perms ExecuteBoxProgramPerm(Compiler lang, bool strict) {
     case Compiler::HASKELL:
       return fs::perms::owner_all | fs::perms::group_exec | fs::perms::others_exec; // 711
     case Compiler::PYTHON2: [[fallthrough]];
-    case Compiler::PYTHON3:
+    case Compiler::PYTHON3: [[fallthrough]];
+    case Compiler::CUSTOM:
       return fs::perms::owner_all |
              fs::perms::group_read | fs::perms::group_exec |
              fs::perms::others_read | fs::perms::others_exec; // 755
