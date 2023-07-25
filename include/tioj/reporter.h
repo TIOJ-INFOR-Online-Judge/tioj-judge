@@ -1,5 +1,5 @@
-#ifndef TIOJ_REPORTER_H_
-#define TIOJ_REPORTER_H_
+#ifndef INCLUDE_TIOJ_REPORTER_H_
+#define INCLUDE_TIOJ_REPORTER_H_
 
 class Submission;
 
@@ -14,4 +14,4 @@ class Reporter {
   virtual void ReportFinalized(const Submission&, size_t queue_size_before_pop) {}
 };
 
-#endif  // TIOJ_REPORTER_H_
+#endif  // INCLUDE_TIOJ_REPORTER_H_

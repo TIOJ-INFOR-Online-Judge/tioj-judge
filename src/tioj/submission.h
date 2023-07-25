@@ -1,6 +1,6 @@
-#ifndef SUBMISSION_H_
-#define SUBMISSION_H_
+#ifndef TIOJ_SUBMISSION_H_
+#define TIOJ_SUBMISSION_H_
 
 #include <tioj/submission.h>
 
-#endif  // SUBMISSION_H_
+#endif  // TIOJ_SUBMISSION_H_

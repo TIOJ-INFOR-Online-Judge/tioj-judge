@@ -1,5 +1,5 @@
-#ifndef SANDBOX_H_
-#define SANDBOX_H_
+#ifndef TIOJ_SANDBOX_H_
+#define TIOJ_SANDBOX_H_
 
 #include <string>
 #include <vector>
@@ -64,4 +64,4 @@ class SandboxOptions {
   CJailCtxClass ToCJailCtx() const;
 };
 
-#endif  // SANDBOX_H_
+#endif  // TIOJ_SANDBOX_H_

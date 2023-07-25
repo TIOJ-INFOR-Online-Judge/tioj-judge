@@ -1,5 +1,5 @@
-#ifndef TIOJ_UTILS_H_
-#define TIOJ_UTILS_H_
+#ifndef INCLUDE_TIOJ_UTILS_H_
+#define INCLUDE_TIOJ_UTILS_H_
 
 #include "tasks.h"
 #include "submission.h"
@@ -19,4 +19,4 @@ const char* CompileSubtaskName(CompileSubtask);
 const char* SpecjudgeTypeName(SpecjudgeType);
 const char* InterlibTypeName(InterlibType);
 
-#endif  // TIOJ_UTILS_H_
+#endif  // INCLUDE_TIOJ_UTILS_H_

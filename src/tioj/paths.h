@@ -1,5 +1,5 @@
-#ifndef PATHS_H_
-#define PATHS_H_
+#ifndef TIOJ_PATHS_H_
+#define TIOJ_PATHS_H_
 
 #include <tioj/paths.h>
 
@@ -40,4 +40,4 @@ fs::path ScoringBoxOutput(long id, int td, int stage, bool inside_box = false);
 fs::path DefaultScoringPath();
 fs::path SpecjudgeHeadersPath();
 
-#endif  // PATHS_H_
+#endif  // TIOJ_PATHS_H_

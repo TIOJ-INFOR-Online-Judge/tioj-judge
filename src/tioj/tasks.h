@@ -1,5 +1,5 @@
-#ifndef TASKS_H_
-#define TASKS_H_
+#ifndef TIOJ_TASKS_H_
+#define TIOJ_TASKS_H_
 
 #include <cjail/cjail.h>
 #include <tioj/tasks.h>
@@ -22,4 +22,4 @@ int RunTask(const Submission&, const Task&);
 std::pair<int, struct cjail_result> WaitAnyResult();
 std::pair<int, struct cjail_result> WaitAnyResult(const std::vector<int>& handles);
 
-#endif // TASKS_H_
+#endif // TIOJ_TASKS_H_

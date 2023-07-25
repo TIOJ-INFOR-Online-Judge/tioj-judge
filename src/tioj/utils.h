@@ -1,5 +1,5 @@
-#ifndef UTILS_H_
-#define UTILS_H_
+#ifndef TIOJ_UTILS_H_
+#define TIOJ_UTILS_H_
 
 #include <filesystem>
 
@@ -27,4 +27,4 @@ bool RemoveAll(const fs::path&);
 bool Move(const fs::path& from, const fs::path& to, fs::perms = fs::perms::unknown);
 bool Copy(const fs::path& from, const fs::path& to, fs::perms = fs::perms::unknown);
 
-#endif  // UTILS_H_
+#endif  // TIOJ_UTILS_H_

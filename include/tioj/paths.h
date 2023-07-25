@@ -1,5 +1,5 @@
-#ifndef TIOJ_PATHS_H_
-#define TIOJ_PATHS_H_
+#ifndef INCLUDE_TIOJ_PATHS_H_
+#define INCLUDE_TIOJ_PATHS_H_
 
 #include <mutex>
 #include <filesystem>
@@ -36,4 +36,4 @@ fs::path SubmissionJudgeCode(int id);
 fs::path SubmissionInterlibCode(int id);
 fs::path SubmissionInterlibImplCode(int id);
 
-#endif  // TIOJ_PATHS_H_
+#endif  // INCLUDE_TIOJ_PATHS_H_

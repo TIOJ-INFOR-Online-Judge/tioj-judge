@@ -1,5 +1,5 @@
-#ifndef SANDBOX_EXEC_H_
-#define SANDBOX_EXEC_H_
+#ifndef TIOJ_SANDBOX_EXEC_H_
+#define TIOJ_SANDBOX_EXEC_H_
 
 #include "sandbox.h"
 
@@ -23,4 +23,4 @@
 //       set workdir to be non-writable by uid and pre-create a file writable by uid for pin output
 struct cjail_result SandboxExec(const SandboxOptions&);
 
-#endif  // SANDBOX_EXEC_H_
+#endif  // TIOJ_SANDBOX_EXEC_H_

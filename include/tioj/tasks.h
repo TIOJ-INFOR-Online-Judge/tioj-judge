@@ -1,5 +1,5 @@
-#ifndef TIOJ_TASKS_H_
-#define TIOJ_TASKS_H_
+#ifndef INCLUDE_TIOJ_TASKS_H_
+#define INCLUDE_TIOJ_TASKS_H_
 
 #define ENUM_TASK_TYPE_ \
   X(COMPILE) \
@@ -21,4 +21,4 @@ enum class CompileSubtask : int {
 #undef X
 };
 
-#endif  // TIOJ_TASKS_H_
+#endif  // INCLUDE_TIOJ_TASKS_H_

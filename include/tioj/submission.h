@@ -1,5 +1,5 @@
-#ifndef TIOJ_SUBMISSION_H_
-#define TIOJ_SUBMISSION_H_
+#ifndef INCLUDE_TIOJ_SUBMISSION_H_
+#define INCLUDE_TIOJ_SUBMISSION_H_
 
 #include <string>
 #include <vector>
@@ -163,4 +163,4 @@ std::vector<int> GetQueuedSubmissionID();
 // 0 = no limit; return false only if queue size exceeded
 bool PushSubmission(Submission&&, size_t max_queue = 0);
 
-#endif  // TIOJ_SUBMISSION_H_
+#endif  // INCLUDE_TIOJ_SUBMISSION_H_
