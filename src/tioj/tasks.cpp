@@ -115,17 +115,17 @@ struct cjail_result RunCompile(const SubmissionAndResult& sub_and_result, const 
       break;
     }
     case Compiler::CUSTOM: {
-      // empty; use *_compile_options to specify
+      // empty; use *_compile_args to specify
       break;
     }
     default: __builtin_unreachable();
   }
-  { // add custom options
-    auto& additional_options = subtask == CompileSubtask::USERPROG ? sub.user_compile_options : sub.specjudge_compile_options;
-    if (additional_options.size()) {
+  { // add custom arguments
+    auto& additional_args = subtask == CompileSubtask::USERPROG ? sub.user_compile_args : sub.specjudge_compile_args;
+    if (additional_args.size()) {
       setenv("INPUT", input.c_str(), 1);
       setenv("OUTPUT", output.c_str(), 1);
-      if (wordexp_t args; wordexp(additional_options.c_str(), &args, WRDE_NOCMD) == 0) {
+      if (wordexp_t args; wordexp(additional_args.c_str(), &args, WRDE_NOCMD) == 0) {
         for (size_t i = 0; i < args.we_wordc; i++) opt.command.push_back(args.we_wordv[i]);
         wordfree(&args);
       }

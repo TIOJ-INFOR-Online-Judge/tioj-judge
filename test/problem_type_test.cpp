@@ -217,7 +217,7 @@ TEST_F(ExampleProblem, UserCompileFlags) {
   SetUp(4, 2);
   AssertVerdictReporter reporter(Verdict::AC);
   sub.reporter = reporter.GetReporter();
-  sub.user_compile_options = "-lgmpxx -lgmp";
+  sub.user_compile_args = "-lgmpxx -lgmp";
   long id = SetupSubmission(sub, 1, Compiler::GCC_CPP_17, kTime, true, R"(#include <iostream>
 #include <gmpxx.h>
 int main() {
@@ -238,7 +238,7 @@ TEST_F(ExampleProblem, UserCompileFlagsSubstitution) {
   sub.reporter.ReportCEMessage = [](auto&, const SubmissionResult& res) {
     ASSERT_TRUE(res.ce_message.find("multiple definition of `main") != std::string::npos);
   };
-  sub.user_compile_options = "$INPUT";
+  sub.user_compile_args = "$INPUT";
   long id = SetupSubmission(sub, 1, Compiler::GCC_CPP_17, kTime, true, "int main(){}");
   PushSubmission(std::move(sub));
   WorkLoop(false);
@@ -249,7 +249,7 @@ TEST_F(ExampleProblem, SpecjudgeCompileFlags) {
   SetUp(4, 2);
   AssertVerdictReporter reporter(Verdict::AC);
   sub.reporter = reporter.GetReporter();
-  sub.specjudge_compile_options = "-lgmpxx -lgmp";
+  sub.specjudge_compile_args = "-lgmpxx -lgmp";
   long id = SetupSubmission(sub, 1, Compiler::GCC_CPP_17, kTime, true, "int main(){}",
       SpecjudgeType::SPECJUDGE_OLD, R"(#include <iostream>
 #include <gmpxx.h>

@@ -416,6 +416,7 @@ bool DealOneSubmission(nlohmann::json&& data) {
     sub.interlib_type = (InterlibType)problem["interlib_type"].get<int>();
     if (sub.specjudge_type != SpecjudgeType::NORMAL) {
       std::ofstream(tempdir.SpecjudgePath()) << problem["sjcode"].get<std::string>();
+      sub.specjudge_compile_args = problem["specjudge_compile_args"].get<std::string>();
     }
     if (sub.interlib_type != InterlibType::NONE) {
       std::ofstream(tempdir.InterlibPath()) << problem["interlib"].get<std::string>();

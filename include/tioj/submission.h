@@ -99,7 +99,7 @@ class Submission {
   SpecjudgeType specjudge_type;
   InterlibType interlib_type;
   Compiler specjudge_lang;
-  std::string user_compile_options, specjudge_compile_options;
+  std::string user_compile_args, specjudge_compile_args;
   int stages;
   bool judge_between_stages;
   bool sandbox_strict; // false for backward-compatability
