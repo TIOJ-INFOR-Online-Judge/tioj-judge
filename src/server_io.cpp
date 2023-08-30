@@ -382,18 +382,18 @@ bool DealOneSubmission(nlohmann::json&& data) {
   std::unordered_map<long, Testdata> new_meta;
   try {
     if (data.empty()) return false;
+
+    // submission information
     sub.submission_id = data["submission_id"].get<int>();
     sub.contest_id = data["contest_id"].get<int>();
     sub.priority = data["priority"].get<long>();
     sub.lang = GetCompiler(data["compiler"].get<std::string>());
     sub.submission_time = data["time"].get<int64_t>();
-    if (data.contains("code_base64")) {
+    sub.skip_group = data.value("skip_group", false);
+    {
       std::ofstream fout(tempdir.UserCodePath());
       OutputBase64(fout, data["code_base64"].get<std::string>());
-    } else {
-      std::ofstream(tempdir.UserCodePath()) << data["code"].get<std::string>();
     }
-    sub.skip_group = data.value("skip_group", false);
 
     // user information
     auto& user = data["user"];
