@@ -19,7 +19,6 @@
 #include "http_utils.h"
 #include "tioj/paths.h"
 #include "tioj/utils.h"
-#include <tioj/reporter.h>
 
 std::string kTIOJUrl = "";
 std::string kTIOJKey = "";
