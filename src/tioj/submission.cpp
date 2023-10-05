@@ -362,7 +362,8 @@ void FinalizeExecute(SubmissionAndResult& sub_and_result, const TaskEntry& task,
                td_result.time, td_result.vss, td_result.rss);
 }
 
-void FinalizeScoring(SubmissionAndResult& sub_and_result, const TaskEntry& task, const struct cjail_result& res);
+void FinalizeScoring(SubmissionAndResult& sub_and_result, const TaskEntry& task,
+                     const struct cjail_result& res, bool skipped = false);
 
 bool SetupScoring(SubmissionAndResult& sub_and_result, const TaskEntry& task) {
   const Submission& sub = sub_and_result.sub;
@@ -374,17 +375,13 @@ bool SetupScoring(SubmissionAndResult& sub_and_result, const TaskEntry& task) {
   int stage = task.task.stage;
   if (IsCancelled(id, sub.testdata[subtask].td_groups)) return false; // cancellation check
 
-  bool last_stage = stage == sub.stages - 1;
   auto& td_result = res.td_results[subtask];
   // if specjudge demends skip, skip anyway
   if (td_result.skip_stage) return false;
   // if already TLE/MLE/etc, do not invoke old-style special judge
   if (td_result.verdict != Verdict::NUL &&
       sub.specjudge_type != SpecjudgeType::SPECJUDGE_NEW) {
-    if (sub.reporter.ReportScoringResult && (sub.report_intermediate_stage || last_stage)) {
-      sub.reporter.ReportScoringResult(sub, res, subtask, stage);
-    }
-    if (!last_stage) td_result.skip_stage = true;
+    FinalizeScoring(sub_and_result, task, {}, true);
     return false;
   }
   CreateDirs(Workdir(ScoringBoxPath(id, subtask, stage)), fs::perms::all);
@@ -421,7 +418,87 @@ bool SetupScoring(SubmissionAndResult& sub_and_result, const TaskEntry& task) {
   return true;
 }
 
-void FinalizeScoring(SubmissionAndResult& sub_and_result, const TaskEntry& task, const struct cjail_result& cjail_res) {
+void ReadOldSpecjudgeResult(const fs::path& output_path, bool last_stage, SubmissionResult::TestdataResult& td_result) {
+  int x;
+  std::ifstream fin(output_path);
+  bool success = bool(fin >> x); // x would be set to 0 if failed, so this is necessary
+  if (success && x == 0) {
+    if (last_stage) {
+      td_result.verdict = Verdict::AC;
+      td_result.score = 100'000'000;
+    } // else: continue (NUL)
+    std::string cmd;
+    bool score_overriden = false;
+    while (fin >> cmd) {
+      if (cmd == "SPECJUDGE_OVERRIDE_SCORE") {
+        long double score;
+        if (fin >> score) {
+          td_result.score = NormalizeScore(score);
+          score_overriden = true;
+        }
+      } else if (cmd == "SPECJUDGE_OVERRIDE_VERDICT") {
+        if (fin >> cmd) {
+          td_result.verdict = AbrToVerdict(cmd, true);
+          if (!score_overriden && td_result.verdict == Verdict::AC) td_result.score = 100'000'000;
+        }
+      } else {
+        break;
+      }
+    }
+  } else {
+    td_result.verdict = Verdict::WA;
+  }
+}
+
+void ReadNewSpecjudgeResult(const fs::path& output_path, SubmissionResult::TestdataResult& td_result) {
+  nlohmann::json json;
+  {
+    std::ifstream fin(output_path);
+    fin >> json;
+  }
+  if (auto it = json.find("verdict"); it != json.end() && it->is_string()) {
+    td_result.verdict = AbrToVerdict(it->get<std::string>(), true);
+    if (td_result.verdict == Verdict::AC) td_result.score = 100'000'000;
+  } // else: WA
+  if (auto it = json.find("score"); it != json.end()) {
+    try {
+      if (it->is_string()) {
+        td_result.score = NormalizeScore(std::stold(it->get<std::string>()));
+      } else if (it->is_number()) {
+        td_result.score = NormalizeScore(it->get<long double>());
+      }
+    } catch (...) {}
+  }
+  auto ReadNumber = [&](const char* attr, long& target) {
+    if (auto it = json.find(attr); it != json.end() && it->is_number()) {
+      try {
+        td_result.time = it->get<long>();
+      } catch (...) {}
+    }
+  };
+  ReadNumber("time_us", td_result.time);
+  ReadNumber("vss_kib", td_result.vss);
+  ReadNumber("rss_kib", td_result.rss);
+  bool has_message = false;
+  if (auto it_type = json.find("message_type"), it_msg = json.find("message");
+      it_type != json.end() && it_msg != json.end() &&
+      it_type->is_string() && it_msg->is_string()) {
+    try {
+      auto& msg_type = it_type->get_ref<std::string&>();
+      if (msg_type == "text" || msg_type == "html") {
+        constexpr size_t kMaxLen = 32768;
+        td_result.message_type = std::move(msg_type);
+        td_result.message = std::move(it_msg->get_ref<std::string&>());
+        if (td_result.message.size() > kMaxLen) td_result.message.resize(kMaxLen);
+        has_message = true;
+      }
+    } catch (...) {}
+  }
+  if (!has_message) td_result.message_type = td_result.message = "";
+}
+
+void FinalizeScoring(SubmissionAndResult& sub_and_result, const TaskEntry& task,
+                     const struct cjail_result& cjail_res, bool skipped) {
   const Submission& sub = sub_and_result.sub;
   SubmissionResult& sub_res = sub_and_result.result;
 
@@ -435,91 +512,16 @@ void FinalizeScoring(SubmissionAndResult& sub_and_result, const TaskEntry& task,
   // default: WA or keep verdict (if TLE etc.) for last_stage,
   //          continue otherwise
   td_result.score = 0;
-  if (!fs::is_regular_file(output_path) || cjail_res.info.si_status != 0) {
+  if (skipped) {
+    // skipped because of TLE/MLE/etc in old-style; do nothing
+  } else if (!fs::is_regular_file(output_path) || cjail_res.info.si_status != 0) {
     // skip remaining stages
     if (td_result.verdict == Verdict::NUL) td_result.verdict = Verdict::WA;
   } else if (sub.specjudge_type == SpecjudgeType::SPECJUDGE_OLD) {
-    int x;
-    std::ifstream fin(output_path);
-    bool success = bool(fin >> x); // x would be set to 0 if failed, so this is necessary
-    if (success && x == 0) {
-      if (last_stage) {
-        td_result.verdict = Verdict::AC;
-        td_result.score = 100'000'000;
-      } // else: continue (NUL)
-      std::string cmd;
-      bool score_overriden = false;
-      while (fin >> cmd) {
-        if (cmd == "SPECJUDGE_OVERRIDE_SCORE") {
-          long double score;
-          if (fin >> score) {
-            td_result.score = NormalizeScore(score);
-            score_overriden = true;
-          }
-        } else if (cmd == "SPECJUDGE_OVERRIDE_VERDICT") {
-          if (fin >> cmd) {
-            td_result.verdict = AbrToVerdict(cmd, true);
-            if (!score_overriden && td_result.verdict == Verdict::AC) td_result.score = 100'000'000;
-          }
-        } else {
-          break;
-        }
-      }
-    } else {
-      td_result.verdict = Verdict::WA;
-    }
+    ReadOldSpecjudgeResult(output_path, last_stage, td_result);
   } else {
-    // parse judge result
     try {
-      nlohmann::json json;
-      {
-        std::ifstream fin(output_path);
-        fin >> json;
-      }
-      if (auto it = json.find("verdict"); it != json.end() && it->is_string()) {
-        td_result.verdict = AbrToVerdict(it->get<std::string>(), true);
-        if (td_result.verdict == Verdict::AC) td_result.score = 100'000'000;
-      } // else: WA
-      if (auto it = json.find("score"); it != json.end()) {
-        try {
-          if (it->is_string()) {
-            td_result.score = NormalizeScore(std::stold(it->get<std::string>()));
-          } else if (it->is_number()) {
-            td_result.score = NormalizeScore(it->get<long double>());
-          }
-        } catch (...) {}
-      }
-      if (auto it = json.find("time_us"); it != json.end() && it->is_number()) {
-        try {
-          td_result.time = it->get<long>();
-        } catch (...) {}
-      }
-      if (auto it = json.find("vss_kib"); it != json.end() && it->is_number()) {
-        try {
-          td_result.vss = it->get<long>();
-        } catch (...) {}
-      }
-      if (auto it = json.find("rss_kib"); it != json.end() && it->is_number()) {
-        try {
-          td_result.rss = it->get<long>();
-        } catch (...) {}
-      }
-      bool has_message = false;
-      if (auto it_type = json.find("message_type"), it_msg = json.find("message");
-          it_type != json.end() && it_msg != json.end() &&
-          it_type->is_string() && it_msg->is_string()) {
-        try {
-          auto& msg_type = it_type->get_ref<std::string&>();
-          if (msg_type == "text" || msg_type == "html") {
-            constexpr size_t kMaxLen = 32768;
-            td_result.message_type = std::move(msg_type);
-            td_result.message = std::move(it_msg->get_ref<std::string&>());
-            if (td_result.message.size() > kMaxLen) td_result.message.resize(kMaxLen);
-            has_message = true;
-          }
-        } catch (...) {}
-      }
-      if (!has_message) td_result.message_type = td_result.message = "";
+      ReadNewSpecjudgeResult(output_path, td_result);
     } catch (nlohmann::json::exception&) {
       // WA
     }
@@ -536,16 +538,16 @@ void FinalizeScoring(SubmissionAndResult& sub_and_result, const TaskEntry& task,
 
   // move possibly modified user output back to original position
   // so that it can be read by the next stage
-  if (!last_stage && !td_result.skip_stage && sub.specjudge_type != SpecjudgeType::SKIP) {
+  if (!last_stage && !skipped && !td_result.skip_stage && sub.specjudge_type != SpecjudgeType::SKIP) {
     Move(ScoringBoxUserOutput(id, subtask, stage), ExecuteBoxFinalOutput(id, subtask, stage));
   }
 
   // remove testdata-related files
   if (last_stage) RemoveAll(ExecuteBoxPath(id, subtask, sub.stages - 1));
-  RemoveAll(ScoringBoxPath(id, subtask, stage));
+  if (!skipped) RemoveAll(ScoringBoxPath(id, subtask, stage));
   if (!cancelled_list.count(id)) {
-    spdlog::info("Scoring finished: id={} subtask={} verdict={} score={} time={} vss={} rss={}",
-                 id, subtask, VerdictToAbr(td_result.verdict),
+    spdlog::info("Scoring {}: id={} subtask={} verdict={} score={} time={} vss={} rss={}",
+                 skipped ? "skipped" : "finished", id, subtask, VerdictToAbr(td_result.verdict),
                  td_result.score, td_result.time, td_result.vss, td_result.rss);
     if (sub.reporter.ReportScoringResult &&
         (sub.report_intermediate_stage || last_stage || td_result.skip_stage)) {

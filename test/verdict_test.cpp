@@ -25,8 +25,7 @@ std::string ParamName(const ::testing::TestParamInfo<SubParam>& info) {
 class ExampleProblemVerdict : public ExampleProblem, public testing::WithParamInterface<SubParam> {};
 TEST_P(ExampleProblemVerdict, Ver) {
   auto& param = GetParam();
-  kMaxParallel = 2;
-  SetUp(1, 2);
+  SetUp(1, 2, 2);
   AssertVerdictReporter reporter(param.verdict, (int)param.verdict < (int)Verdict::CE);
   sub.reporter = reporter.GetReporter();
   Submission sub1 = sub, sub2 = sub;

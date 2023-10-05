@@ -5,7 +5,10 @@
 #include <fstream>
 #include <tioj/paths.h>
 
-void ExampleProblem::SetUp(int problem_id_, int td_num) {
+#include "utils.h"
+
+void ExampleProblem::SetUp(int problem_id_, int td_num, int max_parallel) {
+  kMaxParallel = max_parallel;
   {
     char td_path_tmp[256] = "/tmp/td_test_XXXXXX";
     if (!mkdtemp(td_path_tmp)) throw std::runtime_error("Failed to create");
@@ -26,4 +29,10 @@ void ExampleProblem::SetUp(int problem_id_, int td_num) {
 
 void ExampleProblem::TearDown() {
   fs::remove_all(td_path);
+}
+
+void ExampleProblem::RunAndTeardownSubmission(long id) {
+  PushSubmission(std::move(sub));
+  WorkLoop(false);
+  TeardownSubmission(id);
 }

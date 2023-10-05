@@ -8,8 +8,10 @@
 
 class ExampleProblem : public ::testing::Test {
  protected:
-  void SetUp(int problem_id_, int td_num);
+  void SetUp(int problem_id_, int td_num, int max_parallel = 1);
   void TearDown() override;
+
+  void RunAndTeardownSubmission(long id);
 
   Submission sub;
   int problem_id;

@@ -10,8 +10,7 @@ constexpr long kTime = 1655000000;
 }
 
 TEST_F(ExampleProblem, SpecjudgeOldProblemOneSubmission) {
-  kMaxParallel = 2;
-  SetUp(2, 3);
+  SetUp(2, 3, 2);
   AssertVerdictReporter reporter(Verdict::AC);
   sub.reporter = reporter.GetReporter();
   sub.judge_between_stages = true;
@@ -19,14 +18,11 @@ TEST_F(ExampleProblem, SpecjudgeOldProblemOneSubmission) {
 int main(){ puts("what"); })", SpecjudgeType::SPECJUDGE_OLD, R"(#include <cstdio>
 #include "nlohmann/json.hpp"
 int main(){ puts("0"); })");
-  PushSubmission(std::move(sub));
-  WorkLoop(false);
-  TeardownSubmission(id);
+  RunAndTeardownSubmission(id);
 }
 
 TEST_F(ExampleProblem, SpecjudgeOldSetResult) {
-  kMaxParallel = 2;
-  SetUp(2, 3);
+  SetUp(2, 3, 2);
   AssertVerdictReporter reporter(Verdict::TLE);
   sub.reporter = reporter.GetReporter();
   auto orig_score = sub.reporter.ReportScoringResult;
@@ -37,14 +33,11 @@ TEST_F(ExampleProblem, SpecjudgeOldSetResult) {
   long id = SetupSubmission(sub, 5, Compiler::GCC_CPP_17, kTime, true, R"(#include <cstdio>
 int main(){ puts("what"); })", SpecjudgeType::SPECJUDGE_OLD, R"(#include <cstdio>
 int main(){ puts("0 SPECJUDGE_OVERRIDE_VERDICT TLE SPECJUDGE_OVERRIDE_SCORE 1.234567"); })");
-  PushSubmission(std::move(sub));
-  WorkLoop(false);
-  TeardownSubmission(id);
+  RunAndTeardownSubmission(id);
 }
 
 TEST_F(ExampleProblem, SpecjudgeNewProblemOneSubmission) {
-  kMaxParallel = 2;
-  SetUp(3, 3);
+  SetUp(3, 3, 2);
   AssertVerdictReporter reporter(Verdict::AC);
   sub.reporter = reporter.GetReporter();
   auto orig_score = sub.reporter.ReportScoringResult;
@@ -62,8 +55,7 @@ int main(){ std::cout << nlohmann::json{{"verdict", "AC"}, {"score", "1.234567"}
 }
 
 TEST_F(ExampleProblem, Multistage) {
-  kMaxParallel = 2;
-  SetUp(4, 2);
+  SetUp(4, 2, 2);
   AssertVerdictReporter reporter(Verdict::AC);
   sub.reporter = reporter.GetReporter();
   sub.stages = 3;
@@ -76,8 +68,7 @@ int main(int argc, char** argv){ int a; scanf("%d",&a); printf("%d", a+argv[1][0
 }
 
 TEST_F(ExampleProblem, MultistageTL) {
-  kMaxParallel = 2;
-  SetUp(4, 2);
+  SetUp(4, 2, 2);
   AssertVerdictReporter reporter(Verdict::TLE);
   sub.reporter = reporter.GetReporter();
   sub.stages = 3;
@@ -91,14 +82,11 @@ int main(int argc, char**argv){
   std::ifstream fin(argv[1]); nlohmann::json data; fin >> data;
   std::cout << nlohmann::json{{"verdict", data["stats"]["original_verdict"].get<std::string>()}};
 })");
-  PushSubmission(std::move(sub));
-  WorkLoop(false);
-  TeardownSubmission(id);
+  RunAndTeardownSubmission(id);
 }
 
 TEST_F(ExampleProblem, MultistageSpecjudgeNew) {
-  kMaxParallel = 2;
-  SetUp(4, 2);
+  SetUp(4, 2, 2);
   AssertVerdictReporter reporter(Verdict::AC);
   sub.reporter = reporter.GetReporter();
   auto orig_score = sub.reporter.ReportScoringResult;
@@ -133,14 +121,11 @@ int main(int argc, char**argv){
   }
 }
 )");
-  PushSubmission(std::move(sub));
-  WorkLoop(false);
-  TeardownSubmission(id);
+  RunAndTeardownSubmission(id);
 }
 
 TEST_F(ExampleProblem, MultistageSpecjudgeNewSkip) {
-  kMaxParallel = 2;
-  SetUp(4, 2);
+  SetUp(4, 2, 2);
   AssertVerdictReporter reporter(Verdict::AC);
   sub.reporter = reporter.GetReporter();
   sub.stages = 3;
@@ -153,14 +138,11 @@ TEST_F(ExampleProblem, MultistageSpecjudgeNewSkip) {
   long id = SetupSubmission(sub, 1, Compiler::GCC_CPP_17, kTime, false, "int main(){}",
       SpecjudgeType::SPECJUDGE_NEW, R"(#include <cstdio>
 int main(){ puts("{\"verdict\":\"AC\"}"); })");
-  PushSubmission(std::move(sub));
-  WorkLoop(false);
-  TeardownSubmission(id);
+  RunAndTeardownSubmission(id);
 }
 
 TEST_F(ExampleProblem, MultistageSpecjudgeOld) {
-  kMaxParallel = 2;
-  SetUp(4, 2);
+  SetUp(4, 2, 2);
   AssertVerdictReporter reporter(Verdict::AC);
   sub.reporter = reporter.GetReporter();
   sub.stages = 3;
@@ -188,14 +170,11 @@ int main(int argc, char**argv){
   }
 }
 )");
-  PushSubmission(std::move(sub));
-  WorkLoop(false);
-  TeardownSubmission(id);
+  RunAndTeardownSubmission(id);
 }
 
 TEST_F(ExampleProblem, MultistageSpecjudgeOldWA) {
-  kMaxParallel = 2;
-  SetUp(4, 2);
+  SetUp(4, 2, 2);
   AssertVerdictReporter reporter(Verdict::WA);
   sub.reporter = reporter.GetReporter();
   sub.stages = 3;
@@ -208,9 +187,7 @@ TEST_F(ExampleProblem, MultistageSpecjudgeOldWA) {
   long id = SetupSubmission(sub, 1, Compiler::GCC_CPP_17, kTime, false, R"(#include <cstdio>
 int main(int argc, char** argv){ int a; scanf("%d",&a); printf("%d", a+argv[1][0]-'0'+1); })",
       SpecjudgeType::SPECJUDGE_OLD, "int main(){}");
-  PushSubmission(std::move(sub));
-  WorkLoop(false);
-  TeardownSubmission(id);
+  RunAndTeardownSubmission(id);
 }
 
 TEST_F(ExampleProblem, UserCompileFlags) {
@@ -226,9 +203,7 @@ int main() {
   std::cout << (a * 1234567890123456789_mpz) / 1234567890123456789_mpz;
 }
   )");
-  PushSubmission(std::move(sub));
-  WorkLoop(false);
-  TeardownSubmission(id);
+  RunAndTeardownSubmission(id);
 }
 
 TEST_F(ExampleProblem, UserCompileFlagsSubstitution) {
@@ -240,9 +215,7 @@ TEST_F(ExampleProblem, UserCompileFlagsSubstitution) {
   };
   sub.user_compile_args = "$INPUT";
   long id = SetupSubmission(sub, 1, Compiler::GCC_CPP_17, kTime, true, "int main(){}");
-  PushSubmission(std::move(sub));
-  WorkLoop(false);
-  TeardownSubmission(id);
+  RunAndTeardownSubmission(id);
 }
 
 TEST_F(ExampleProblem, SpecjudgeCompileFlags) {
@@ -256,7 +229,27 @@ TEST_F(ExampleProblem, SpecjudgeCompileFlags) {
 int main(int argc, char**argv){
   if (argc * 1234567890123456789_mpz == argc * 1234567890123456789_mpz) std::cout << 0_mpz;
 })");
-  PushSubmission(std::move(sub));
-  WorkLoop(false);
-  TeardownSubmission(id);
+  RunAndTeardownSubmission(id);
+}
+
+TEST_F(ExampleProblem, SkipGroup) {
+  SetUp(5, 4, 1);
+  sub.skip_group = true;
+  sub.testdata[0].td_groups = {0, 1};
+  sub.testdata[1].td_groups = {0, 1};
+  sub.testdata[2].td_groups = {2, 3};
+  sub.testdata[3].td_groups = {2, 3};
+  AssertVerdictReporter reporter(Verdict::TLE);
+  sub.reporter = reporter.GetReporter();
+  auto orig_score = sub.reporter.ReportScoringResult;
+  int total_results = 0;
+  sub.reporter.ReportScoringResult = [&](auto& sub, auto& res, int subtask, int stage){
+    orig_score(sub, res, subtask, stage);
+    total_results++;
+  };
+  long id = SetupSubmission(sub, 5, Compiler::GCC_CPP_17, kTime, true, R"(#include <cstdio>
+int main(){ while (true); })", SpecjudgeType::SPECJUDGE_OLD, R"(#include <cstdio>
+int main(){ puts("0"); })");
+  RunAndTeardownSubmission(id);
+  ASSERT_EQ(total_results, 2);
 }

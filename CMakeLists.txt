@@ -1,5 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
-cmake_policy(SET CMP0135 NEW)
+cmake_minimum_required(VERSION 3.10...3.26)
 
 project(tioj_judge VERSION 0.1 LANGUAGES CXX)
 set(SOVERSION 0)

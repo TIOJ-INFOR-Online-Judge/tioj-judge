@@ -29,14 +29,11 @@ std::string ParamName(const ::testing::TestParamInfo<SubParam>& info) {
 class ExampleProblemOneSubmission : public ExampleProblem, public testing::WithParamInterface<SubParam> {};
 TEST_P(ExampleProblemOneSubmission, Sub) {
   auto& param = GetParam();
-  kMaxParallel = param.parallel;
-  SetUp(1, 5);
+  SetUp(1, 5, param.parallel);
   AssertVerdictReporter reporter(Verdict::AC);
   sub.reporter = reporter.GetReporter();
   long id = SetupSubmission(sub, param.sub_id, param.lang, kTime, param.is_strict, param.code);
-  PushSubmission(std::move(sub));
-  WorkLoop(false);
-  TeardownSubmission(id);
+  RunAndTeardownSubmission(id);
 }
 INSTANTIATE_TEST_SUITE_P(OneSubmission, ExampleProblemOneSubmission,
     testing::Values(
