@@ -1,6 +1,7 @@
 #ifndef TIOJ_SANDBOX_H_
 #define TIOJ_SANDBOX_H_
 
+#include <cstdint>
 #include <string>
 #include <vector>
 
