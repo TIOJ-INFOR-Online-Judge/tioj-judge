@@ -170,7 +170,7 @@ int main(int argc, char** argv) {
   }
 
   // parse arguments
-  std::string type = "line", subtype;
+  std::string type = "line", subtype = "absolute-relative";
   double threshold = 1e-6;
   {
     for (int i = 2; i < argc; i++) {
@@ -184,7 +184,7 @@ int main(int argc, char** argv) {
         subtype = argv[++i];
         if (i + 1 < argc) {
           try {
-            threshold = std::stold(std::string(argv[i]));
+            threshold = std::stold(std::string(argv[i + 1]));
             i++;
           } catch (...) {}
         }

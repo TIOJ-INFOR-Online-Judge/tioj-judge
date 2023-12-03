@@ -9,6 +9,7 @@ class AssertVerdictReporter {
   bool has_scoring_result_;
   bool has_overall_result_;
   bool require_scoring_;
+  bool assert_scoring_verdict_;
 
   void AssertResult_() {
     ASSERT_TRUE(has_overall_result_ && (!require_scoring_ || has_scoring_result_));
@@ -16,10 +17,11 @@ class AssertVerdictReporter {
  public:
   Verdict expect_verdict;
 
-  AssertVerdictReporter(Verdict ver, bool require_scoring = true) :
+  AssertVerdictReporter(Verdict ver, bool require_scoring = true, bool assert_scoring_verdict = true) :
       has_scoring_result_(false),
       has_overall_result_(false),
       require_scoring_(require_scoring),
+      assert_scoring_verdict_(assert_scoring_verdict),
       expect_verdict(ver) {}
   ~AssertVerdictReporter() { AssertResult_(); }
 
@@ -28,7 +30,9 @@ class AssertVerdictReporter {
     has_overall_result_ = true;
   }
   void ReportScoringResult(const SubmissionResult& res, int subtask) {
-    ASSERT_EQ(res.td_results[subtask].verdict, expect_verdict);
+    if (assert_scoring_verdict_) {
+      ASSERT_EQ(res.td_results[subtask].verdict, expect_verdict);
+    }
     has_scoring_result_ = true;
   }
 
