@@ -13,6 +13,7 @@ struct SubmissionAndResult {
   SubmissionAndResult& operator=(const SubmissionAndResult&) = delete;
 
   nlohmann::json TestdataMeta(int subtask, int stage) const;
+  nlohmann::json SummaryMeta() const;
 };
 
 #endif  // TIOJ_SUBMISSION_H_

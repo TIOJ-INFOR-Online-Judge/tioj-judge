@@ -36,6 +36,10 @@ fs::path ScoringBoxTdInput(long id, int td, int stage, bool inside_box = false);
 fs::path ScoringBoxTdOutput(long id, int td, int stage, bool inside_box = false);
 fs::path ScoringBoxMetaFile(long id, int td, int stage, bool inside_box = false);
 fs::path ScoringBoxOutput(long id, int td, int stage, bool inside_box = false);
+fs::path SummaryBoxPath(long id);
+fs::path SummaryBoxProgram(long id, Compiler lang, bool inside_box = false);
+fs::path SummaryBoxMetaFile(long id, bool inside_box);
+fs::path SummaryBoxOutput(long id, bool inside_box);
 
 fs::path DefaultScoringPath();
 fs::path SpecjudgeHeadersPath();

@@ -36,6 +36,15 @@ enum class InterlibType {
 #undef X
 };
 
+#define ENUM_SUMMARY_TYPE_ \
+  X(NONE) \
+  X(CUSTOM)
+enum class SummaryType {
+#define X(name) name,
+  ENUM_SUMMARY_TYPE_
+#undef X
+};
+
 #define ENUM_COMPILER_ \
   X(GCC_CPP_98, "c++98") \
   X(GCC_CPP_11, "c++11") \
@@ -98,7 +107,9 @@ class Submission {
   int problem_id;
   SpecjudgeType specjudge_type;
   InterlibType interlib_type;
+  SummaryType summary_type;
   Compiler specjudge_lang;
+  Compiler summary_lang;
   std::string user_compile_args, specjudge_compile_args;
   int stages;
   bool judge_between_stages;
@@ -143,7 +154,9 @@ class Submission {
       problem_id(0),
       specjudge_type(SpecjudgeType::NORMAL),
       interlib_type(InterlibType::NONE),
+      summary_type(SummaryType::NONE),
       specjudge_lang(Compiler::GCC_CPP_17),
+      summary_lang(Compiler::GCC_CPP_17),
       stages(1),
       judge_between_stages(false),
       sandbox_strict(false),

@@ -33,6 +33,7 @@ extern TdFileLock td_file_lock;
 fs::path SubmissionCodePath(int id);
 fs::path SubmissionUserCode(int id);
 fs::path SubmissionJudgeCode(int id);
+fs::path SubmissionSummaryCode(int id);
 fs::path SubmissionInterlibCode(int id);
 fs::path SubmissionInterlibImplCode(int id);
 

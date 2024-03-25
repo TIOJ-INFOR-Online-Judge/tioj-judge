@@ -80,6 +80,7 @@ struct cjail_result RunCompile(const SubmissionAndResult& sub_and_result, const 
       break;
     }
     case CompileSubtask::SPECJUDGE: lang = sub.specjudge_lang; break;
+    case CompileSubtask::SUMMARY: lang = sub.summary_lang; break;
     default: __builtin_unreachable();
   }
   std::string input = CompileBoxInput(-1, subtask, lang, true);
@@ -120,7 +121,7 @@ struct cjail_result RunCompile(const SubmissionAndResult& sub_and_result, const 
     }
     default: __builtin_unreachable();
   }
-  { // add custom arguments
+  if (subtask != CompileSubtask::SUMMARY) { // add custom arguments
     auto& additional_args = subtask == CompileSubtask::USERPROG ? sub.user_compile_args : sub.specjudge_compile_args;
     if (additional_args.size()) {
       setenv("INPUT", input.c_str(), 1);
@@ -263,6 +264,31 @@ struct cjail_result RunScoring(const SubmissionAndResult& sub_and_result, const 
   return SandboxExec(opt);
 }
 
+struct cjail_result RunSummary(const SubmissionAndResult& sub_and_result, const Task& task, int uid, int cpuid) {
+  const Submission& sub = sub_and_result.sub;
+  long id = sub.submission_internal_id;
+  spdlog::debug("Generating summary settings: id={} subid={}", id, sub.submission_id);
+  std::string program = SummaryBoxProgram(-1, sub.summary_lang, true);
+
+  SandboxOptions opt;
+  opt.boxdir = SummaryBoxPath(id);
+  opt.command = ExecuteCommand(sub.summary_lang, program);
+  // TODO: meta file
+  opt.workdir = Workdir("/");
+  opt.output = SummaryBoxOutput(-1, true);
+  opt.error = "/dev/null";
+  if (cpuid != -1) opt.cpu_set.push_back(cpuid);
+  opt.uid = opt.gid = uid;
+  opt.wall_time = 60L * 1'000'000;
+  opt.wall_time /= kTimeMultiplier;
+  opt.rss = kMaxRSS;
+  opt.proc_num = 10;
+  opt.fsize = kMaxOutput;
+  opt.dirs = {"/usr", "/var/lib", "/lib", "/lib64", "/etc/alternatives", "/bin"};
+  opt.FilterDirs();
+  return SandboxExec(opt);
+}
+
 /// parent
 constexpr int kUidBase = 50000, kUidPoolSize = 100;
 std::vector<int> uid_pool, cpuid_pool;
@@ -311,7 +337,6 @@ bool Wait() {
 } // namespace
 
 int RunTask(const SubmissionAndResult& sub, const Task& task) {
-  if (task.type == TaskType::FINALIZE) return -1;
   if (!pool_init) InitPools();
   int pipefd[2];
   if (pipe(pipefd) < 0) return -1;
@@ -341,7 +366,7 @@ int RunTask(const SubmissionAndResult& sub, const Task& task) {
       case TaskType::COMPILE: ret = RunCompile(sub, task, uid, cpuid); break;
       case TaskType::EXECUTE: ret = RunExecute(sub, task, uid, cpuid); break;
       case TaskType::SCORING: ret = RunScoring(sub, task, uid, cpuid); break;
-      case TaskType::FINALIZE: __builtin_unreachable();
+      case TaskType::SUMMARY: ret = RunSummary(sub, task, uid, cpuid); break;
     }
     IGNORE_RETURN(write(pipefd[1], &ret, sizeof(struct cjail_result)));
     _exit(0); // since forked, some atexit() may hang by deadlocks

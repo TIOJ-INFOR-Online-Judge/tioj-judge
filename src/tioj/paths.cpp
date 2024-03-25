@@ -66,6 +66,8 @@ inline std::string CompileCodeName(CompileSubtask subtask, Compiler lang) {
       return "prog" + extension;
     case CompileSubtask::SPECJUDGE:
       return "judge" + extension;
+    case CompileSubtask::SUMMARY:
+      return "summary" + extension;
   }
   __builtin_unreachable();
 }
@@ -78,6 +80,8 @@ inline std::string CompileResultName(CompileSubtask subtask, Compiler lang) {
       return "prog" + extension;
     case CompileSubtask::SPECJUDGE:
       return "judge" + extension;
+    case CompileSubtask::SUMMARY:
+      return "summary" + extension;
   }
   __builtin_unreachable();
 }
@@ -199,6 +203,19 @@ fs::path ScoringBoxOutput(long id, int td, int stage, bool inside_box) {
   return Workdir(BoxRoot(ScoringBoxPath(id, td, stage), inside_box)) / "output";
 }
 
+fs::path SummaryBoxPath(long id) {
+  return SubmissionRunPath(id) / "summary";
+}
+fs::path SummaryBoxProgram(long id, Compiler lang, bool inside_box) {
+  return Workdir(BoxRoot(SummaryBoxPath(id), inside_box)) / ("prog" + std::string(ProgramExtension(lang)));
+}
+fs::path SummaryBoxMetaFile(long id, bool inside_box) {
+  return Workdir(BoxRoot(SummaryBoxPath(id), inside_box)) / "meta";
+}
+fs::path SummaryBoxOutput(long id, bool inside_box) {
+  return Workdir(BoxRoot(SummaryBoxPath(id), inside_box)) / "output";
+}
+
 std::mutex& TdFileLock::operator[](int id) {
   std::lock_guard lck(global_lock_);
   return mutex_map_[id];
@@ -220,6 +237,9 @@ fs::path SubmissionUserCode(int id) {
 }
 fs::path SubmissionJudgeCode(int id) {
   return SubmissionCodePath(id) / "judge";
+}
+fs::path SubmissionSummaryCode(int id) {
+  return SubmissionCodePath(id) / "summary";
 }
 fs::path SubmissionInterlibCode(int id) {
   return SubmissionCodePath(id) / "interlib";

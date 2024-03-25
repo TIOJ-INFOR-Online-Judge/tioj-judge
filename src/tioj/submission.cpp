@@ -70,6 +70,11 @@ nlohmann::json SubmissionAndResult::TestdataMeta(int subtask, int stage) const {
   };
 }
 
+nlohmann::json SubmissionAndResult::SummaryMeta() const {
+  // TODO
+  return {};
+}
+
 namespace {
 
 // TaskEntry will form a dependency directed graph
@@ -151,6 +156,15 @@ inline long NormalizeScore(long double score) {
   return std::lround(score * 1'000'000);
 }
 
+inline Compiler GetLang(const Submission& sub, CompileSubtask subtask) {
+  switch (subtask) {
+    case CompileSubtask::USERPROG: return sub.lang;
+    case CompileSubtask::SPECJUDGE: return sub.specjudge_lang;
+    case CompileSubtask::SUMMARY: return sub.specjudge_lang;
+  }
+  __builtin_unreachable();
+}
+
 /// Task env setup
 bool SetupCompile(const SubmissionAndResult& sub_and_result, const TaskEntry& task) {
   const Submission& sub = sub_and_result.sub;
@@ -159,10 +173,24 @@ bool SetupCompile(const SubmissionAndResult& sub_and_result, const TaskEntry& ta
   if (cancelled_list.count(id)) return false; // cancellation check
 
   CreateDirs(Workdir(CompileBoxPath(id, subtask)), fs::perms::all);
-  switch (subtask) {
+  fs::path code_dest = CompileBoxInput(id, subtask, GetLang(sub, subtask));
+  switch (subtask) { // copy code
+    case CompileSubtask::USERPROG: {
+      Copy(SubmissionUserCode(id), code_dest, kPerm666);
+      break;
+    }
+    case CompileSubtask::SPECJUDGE: {
+      Copy(SubmissionJudgeCode(id), code_dest, kPerm666);
+      break;
+    }
+    case CompileSubtask::SUMMARY: {
+      Copy(SubmissionSummaryCode(id), code_dest, kPerm666);
+      break;
+    }
+  }
+  switch (subtask) { // copy other dependencies
     case CompileSubtask::USERPROG: {
       if (sub.reporter.ReportStartCompiling) sub.reporter.ReportStartCompiling(sub, sub_and_result.result);
-      Copy(SubmissionUserCode(id), CompileBoxInput(id, subtask, sub.lang), kPerm666);
       switch (sub.interlib_type) {
         case InterlibType::NONE: break;
         case InterlibType::INCLUDE: {
@@ -173,8 +201,8 @@ bool SetupCompile(const SubmissionAndResult& sub_and_result, const TaskEntry& ta
       }
       break;
     }
-    case CompileSubtask::SPECJUDGE: {
-      Copy(SubmissionJudgeCode(id), CompileBoxInput(id, subtask, sub.specjudge_lang), kPerm666);
+    case CompileSubtask::SPECJUDGE: [[fallthrough]];
+    case CompileSubtask::SUMMARY: {
       fs::path src = SpecjudgeHeadersPath();
       fs::path box = Workdir(CompileBoxPath(id, subtask));
       for (auto& dir_entry : fs::recursive_directory_iterator(src)) {
@@ -201,7 +229,7 @@ void FinalizeCompile(SubmissionAndResult& sub_and_result, const TaskEntry& task,
 
   long id = sub.submission_internal_id;
   CompileSubtask subtask = (CompileSubtask)task.task.subtask;
-  auto lang = subtask == CompileSubtask::USERPROG ? sub.lang : sub.specjudge_lang;
+  auto lang = GetLang(sub, subtask);
   if (cjail_res.timekill == -1) {
     sub_res.verdict = Verdict::JE;
   } else if (cjail_res.timekill || cjail_res.oomkill > 0 || cjail_res.info.si_status != 0 ||
@@ -217,20 +245,18 @@ void FinalizeCompile(SubmissionAndResult& sub_and_result, const TaskEntry& task,
     fs::path path = CompileBoxMessage(id, subtask);
     std::string message;
     if (fs::is_regular_file(path)) {
-      char buf[kMaxMsgLen + 1];
+      size_t total_length = fs::file_size(path);
+      char buf[kMaxMsgLen];
       std::ifstream fin(path);
       fin.read(buf, sizeof(buf));
       message.assign(buf, fin.gcount());
-      spdlog::debug("Message: {}", message);
-      bool truncated = message.size() > kMaxMsgLen;
-      if (truncated) {
-        message.resize(kMaxMsgLen);
-      }
+      bool truncated = total_length > kMaxMsgLen;
       message = std::regex_replace(message, kFilterRegex, kFilterReplace);
       if (truncated) {
         message += "\n[Error message truncated after " +
-            std::to_string(kMaxMsgLen) + " bytes]";
+            std::to_string(kMaxMsgLen) + " bytes (total " + std::to_string(total_length) + " bytes)]";
       }
+      spdlog::debug("Message: {}", message);
     }
     switch (subtask) {
       case CompileSubtask::USERPROG: {
@@ -241,6 +267,10 @@ void FinalizeCompile(SubmissionAndResult& sub_and_result, const TaskEntry& task,
       case CompileSubtask::SPECJUDGE: {
         sub_res.er_message = std::move(message);
         if (sub.reporter.ReportERMessage) sub.reporter.ReportERMessage(sub, sub_res);
+        break;
+      }
+      case CompileSubtask::SUMMARY: {
+        // do nothing
         break;
       }
     }
@@ -556,8 +586,13 @@ void FinalizeScoring(SubmissionAndResult& sub_and_result, const TaskEntry& task,
   }
 }
 
+bool SetupSummary(SubmissionAndResult& sub_and_result, const TaskEntry& task) {
+  // TODO
+  return false;
+}
+
 /// Submission tasks env teardown
-void FinalizeSubmission(SubmissionAndResult& sub_and_result, const TaskEntry& task) {
+void FinalizeSummary(SubmissionAndResult& sub_and_result, const TaskEntry& task, const struct cjail_result& cjail_res) {
   const Submission& sub = sub_and_result.sub;
   SubmissionResult& res = sub_and_result.result;
   long id = sub.submission_internal_id;
@@ -589,13 +624,13 @@ void FinalizeTask(long id, const struct cjail_result& res, bool skipped = false)
   auto& entry = task_list[id];
   spdlog::info("Finalizing task: id={} taskid={} tasktype={} subtask={} stage={} skipped={}",
                entry.submission_internal_id, id, TaskTypeName(entry.task.type), entry.task.subtask, entry.task.stage, skipped);
-  if (!skipped) {
+  if (!skipped || entry.task.type == TaskType::SUMMARY) {
     auto& sub = submission_list.at(entry.submission_internal_id);
     switch (entry.task.type) {
       case TaskType::COMPILE: FinalizeCompile(sub, entry, res); break;
       case TaskType::EXECUTE: FinalizeExecute(sub, entry, res); break;
       case TaskType::SCORING: FinalizeScoring(sub, entry, res); break;
-      case TaskType::FINALIZE: __builtin_unreachable(); // skipped = true if FINALIZE
+      case TaskType::SUMMARY: FinalizeSummary(sub, entry, res); break;
     }
   }
   Remove(entry);
@@ -611,7 +646,7 @@ bool DispatchTask(long id) {
     case TaskType::COMPILE: res = SetupCompile(sub, entry); break;
     case TaskType::EXECUTE: res = SetupExecute(sub, entry); break;
     case TaskType::SCORING: res = SetupScoring(sub, entry); break;
-    case TaskType::FINALIZE: res = false; FinalizeSubmission(sub, entry); break;
+    case TaskType::SUMMARY: res = SetupSummary(sub, entry); break;
   }
   if (!res) {
     FinalizeTask(id, {}, true);
@@ -677,9 +712,9 @@ std::vector<int> GetQueuedSubmissionID() {
 bool PushSubmission(Submission&& sub, size_t max_queue) {
   // Build this dependency graph (for 2 tds, 2 stages, judge between stages):
   //    compile_sj --------------+--------+
-  //                             |        |
-  //                             |        v
-  // compile ---+-> execute_0_0 ---> scoring_0_0---> execute_0_1 ---> scoring_0_1 ---+---> finalize
+  //                             |        |                       compile_summary ---+
+  //                             |        v                                          |
+  // compile ---+-> execute_0_0 ---> scoring_0_0---> execute_0_1 ---> scoring_0_1 ---+--->  summary
   //            |                |                                                   |
   //            +-> execute_1_0 -+-> scoring_1_0---> execute_1_1 -+-> scoring_1_1 ---+
   //
@@ -731,7 +766,7 @@ bool PushSubmission(Submission&& sub, size_t max_queue) {
     for (int i = 0; i < num_tds; i++) td_order[i] = i;
   }
   std::vector<std::vector<TaskEntry>> executes, scorings;
-  TaskEntry finalize(id, {TaskType::FINALIZE, 0, 0}, priority);
+  TaskEntry summary(id, {TaskType::SUMMARY, 0, 0}, priority);
   for (int i = 0; i < num_tds; i++) {
     executes.emplace_back(); // index i
     scorings.emplace_back();
@@ -750,24 +785,29 @@ bool PushSubmission(Submission&& sub, size_t max_queue) {
       scorings[i].emplace_back(id, (Task){TaskType::SCORING, i, sub.stages - 1}, priority, td_order[i]);
       Link(executes[i].back(), scorings[i].back());
     }
-    Link(scorings[i].back(), finalize);
+    Link(scorings[i].back(), summary);
   }
   {
     TaskEntry compile(id, {TaskType::COMPILE, (int)CompileSubtask::USERPROG}, priority);
     for (auto& i : executes) Link(compile, i[0]);
-    if (executes.empty()) Link(compile, finalize);
+    if (executes.empty()) Link(compile, summary);
     InsertTaskList(std::move(compile));
   }
   if (sub.specjudge_type == SpecjudgeType::SPECJUDGE_OLD ||
       sub.specjudge_type == SpecjudgeType::SPECJUDGE_NEW) {
     TaskEntry compile(id, {TaskType::COMPILE, (int)CompileSubtask::SPECJUDGE}, priority);
     for (auto& i : scorings) Link(compile, i[0]);
-    if (executes.empty()) Link(compile, finalize);
+    if (executes.empty()) Link(compile, summary);
+    InsertTaskList(std::move(compile));
+  }
+  if (sub.summary_type == SummaryType::CUSTOM) {
+    TaskEntry compile(id, {TaskType::COMPILE, (int)CompileSubtask::SUMMARY}, priority);
+    Link(compile, summary);
     InsertTaskList(std::move(compile));
   }
   for (auto& i : executes) for (auto& j : i) InsertTaskList(std::move(j));
   for (auto& i : scorings) for (auto& j : i) InsertTaskList(std::move(j));
-  InsertTaskList(std::move(finalize));
+  InsertTaskList(std::move(summary));
   submission_list.insert({id, std::move(sub)});
   if (auto it = submission_id_map.insert({sub.submission_id, id}); !it.second) {
     // if the same submission is already judging, mark it as cancelled

@@ -5,7 +5,7 @@
   X(COMPILE) \
   X(EXECUTE) \
   X(SCORING) /* special judge */ \
-  X(FINALIZE)
+  X(SUMMARY)
 enum class TaskType {
 #define X(name) name,
   ENUM_TASK_TYPE_
@@ -14,7 +14,8 @@ enum class TaskType {
 
 #define ENUM_COMPILE_SUBTASK_ \
   X(USERPROG) \
-  X(SPECJUDGE)
+  X(SPECJUDGE) \
+  X(SUMMARY)
 enum class CompileSubtask : int {
 #define X(name) name,
   ENUM_COMPILE_SUBTASK_
