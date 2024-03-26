@@ -240,7 +240,7 @@ struct cjail_result RunScoring(const SubmissionAndResult& sub_and_result, const 
       ScoringBoxTdInput(-1, -1, -1, true),
       ScoringBoxTdOutput(-1, -1, -1, true),
       CompilerName(sub.lang),
-      ScoringBoxCode(-1, -1, -1, sub.lang, true),
+      ScoringBoxUserCode(-1, -1, -1, sub.lang, true),
       std::to_string(stage),
     });
   } else {
@@ -273,7 +273,7 @@ struct cjail_result RunSummary(const SubmissionAndResult& sub_and_result, const 
   SandboxOptions opt;
   opt.boxdir = SummaryBoxPath(id);
   opt.command = ExecuteCommand(sub.summary_lang, program);
-  // TODO: meta file
+  opt.command.push_back(SummaryBoxMetaFile(-1, true));
   opt.workdir = Workdir("/");
   opt.output = SummaryBoxOutput(-1, true);
   opt.error = "/dev/null";

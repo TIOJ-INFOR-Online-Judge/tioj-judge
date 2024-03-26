@@ -184,7 +184,7 @@ fs::path ScoringBoxPath(long id, int td, int stage) {
 fs::path ScoringBoxProgram(long id, int td, int stage, Compiler lang, bool inside_box) {
   return Workdir(BoxRoot(ScoringBoxPath(id, td, stage), inside_box)) / ("prog" + std::string(ProgramExtension(lang)));
 }
-fs::path ScoringBoxCode(long id, int td, int stage, Compiler lang, bool inside_box) {
+fs::path ScoringBoxUserCode(long id, int td, int stage, Compiler lang, bool inside_box) {
   return Workdir(BoxRoot(ScoringBoxPath(id, td, stage), inside_box)) / ("code" + std::string(CodeExtension(lang)));
 }
 fs::path ScoringBoxUserOutput(long id, int td, int stage, bool inside_box) {
@@ -208,6 +208,12 @@ fs::path SummaryBoxPath(long id) {
 }
 fs::path SummaryBoxProgram(long id, Compiler lang, bool inside_box) {
   return Workdir(BoxRoot(SummaryBoxPath(id), inside_box)) / ("prog" + std::string(ProgramExtension(lang)));
+}
+fs::path SummaryBoxUserCode(long id, Compiler lang, bool inside_box) {
+  return Workdir(BoxRoot(SummaryBoxPath(id), inside_box)) / ("code" + std::string(CodeExtension(lang)));
+}
+fs::path SummaryBoxCEMessage(long id, bool inside_box) {
+  return Workdir(BoxRoot(SummaryBoxPath(id), inside_box)) / "ce_message";
 }
 fs::path SummaryBoxMetaFile(long id, bool inside_box) {
   return Workdir(BoxRoot(SummaryBoxPath(id), inside_box)) / "meta";

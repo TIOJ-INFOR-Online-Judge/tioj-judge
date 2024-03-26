@@ -38,7 +38,7 @@ nlohmann::json SubmissionAndResult::TestdataMeta(int subtask, int stage) const {
     {"input_file", ScoringBoxTdInput(-1, -1, -1, true)},
     {"answer_file", ScoringBoxTdOutput(-1, -1, -1, true)},
     {"user_output_file", ScoringBoxUserOutput(-1, -1, -1, true)},
-    {"user_code_file", ScoringBoxCode(-1, -1, -1, sub.lang, true)},
+    {"user_code_file", ScoringBoxUserCode(-1, -1, -1, sub.lang, true)},
     {"problem_id", sub.problem_id},
     {"contest_id", sub.contest_id},
     {"submission_id", sub.submission_id},
@@ -151,8 +151,9 @@ inline bool IsCancelled(long id, const std::vector<int>& groups) {
 }
 
 inline long NormalizeScore(long double score) {
-  if (score > 1e+6) score = 1e+6;
-  if (score < -1e+6) score = -1e+6;
+  constexpr long double kMax = 999999.999999L;
+  if (score > kMax) score = kMax;
+  if (score < -kMax) score = -kMax;
   return std::lround(score * 1'000'000);
 }
 
@@ -269,6 +270,7 @@ void FinalizeCompile(SubmissionAndResult& sub_and_result, const TaskEntry& task,
         break;
       }
       case CompileSubtask::SUMMARY: {
+        if (sub_res.er_message.empty()) sub_res.er_message = std::move(message);
         // do nothing
         break;
       }
@@ -435,7 +437,7 @@ bool SetupScoring(SubmissionAndResult& sub_and_result, const TaskEntry& task) {
     Copy(sub.testdata[subtask].input_file, ScoringBoxTdInput(id, subtask, stage), kPerm666);
     Copy(sub.testdata[subtask].answer_file, ScoringBoxTdOutput(id, subtask, stage), kPerm666);
   }
-  Copy(SubmissionUserCode(id), ScoringBoxCode(id, subtask, stage, sub.lang), kPerm666);
+  Copy(SubmissionUserCode(id), ScoringBoxUserCode(id, subtask, stage, sub.lang), kPerm666);
   // special judge program
   fs::path specjudge_prog = sub.specjudge_type == SpecjudgeType::NORMAL ?
       DefaultScoringPath() : CompileBoxOutput(id, CompileSubtask::SPECJUDGE, sub.specjudge_lang);
@@ -586,8 +588,62 @@ void FinalizeScoring(SubmissionAndResult& sub_and_result, const TaskEntry& task,
 }
 
 bool SetupSummary(SubmissionAndResult& sub_and_result, const TaskEntry& task) {
-  // TODO
-  return false;
+  const Submission& sub = sub_and_result.sub;
+  if (sub.summary_type == SummaryType::NONE) return false;
+
+  long id = sub.submission_internal_id;
+  CreateDirs(Workdir(SummaryBoxPath(id)), fs::perms::all);
+  Copy(SubmissionUserCode(id), SummaryBoxUserCode(id, sub.lang), kPerm666);
+  if (fs::path ce_message_src = CompileBoxMessage(id, CompileSubtask::USERPROG);
+      fs::is_regular_file(ce_message_src)) {
+    Copy(ce_message_src, SummaryBoxCEMessage(id), kPerm666);
+  } else {
+    // touch file
+    std::ofstream(SummaryBoxCEMessage(id)).close();
+    fs::permissions(SummaryBoxCEMessage(id), kPerm666);
+  }
+  Copy(CompileBoxMessage(id, CompileSubtask::USERPROG),
+       SummaryBoxCEMessage(id), kPerm666);
+  Copy(CompileBoxOutput(id, CompileSubtask::SUMMARY, sub.summary_lang),
+       SummaryBoxProgram(id, sub.summary_lang), fs::perms::all);
+  { // write meta file
+    std::ofstream fout(SummaryBoxMetaFile(id));
+    fout << sub_and_result.SummaryMeta();
+  }
+  return true;
+}
+
+void ReadSummaryResult(const fs::path& output_path, SubmissionResult& res) {
+  nlohmann::json json;
+  {
+    std::ifstream fin(output_path);
+    fin >> json;
+  }
+  if (auto it = json.find("verdict"); it != json.end() && it->is_string()) {
+    res.verdict = AbrToVerdict(it->get<std::string>(), false);
+  }
+  if (res.verdict == Verdict::NUL) res.verdict = Verdict::WA;
+  if (auto it = json.find("score"); it != json.end()) {
+    try {
+      if (it->is_string()) {
+        res.total_score = NormalizeScore(std::stold(it->get<std::string>()));
+      } else if (it->is_number()) {
+        res.total_score = NormalizeScore(it->get<long double>());
+      }
+    } catch (...) {}
+  }
+  auto ReadNumber = [&](const char* attr, long& target) {
+    if (auto it = json.find(attr); it != json.end() && it->is_number()) {
+      try {
+        target = it->get<long>();
+      } catch (...) {}
+    }
+  };
+  ReadNumber("total_time", res.total_time);
+  ReadNumber("total_memory", res.total_memory);
+  if (auto it = json.find("ce_message"); it != json.end() && it->is_string()) {
+    res.ce_message = it->get<std::string>();
+  }
 }
 
 /// Submission tasks env teardown
@@ -595,8 +651,7 @@ void FinalizeSummary(SubmissionAndResult& sub_and_result, const TaskEntry& task,
   const Submission& sub = sub_and_result.sub;
   SubmissionResult& res = sub_and_result.result;
   long id = sub.submission_internal_id;
-  if (sub.remove_submission) RemoveAll(SubmissionCodePath(id));
-  RemoveAll(SubmissionRunPath(id));
+
   if (res.verdict == Verdict::NUL) {
     res.verdict = Verdict::AC;
     for (size_t i = 0; i < res.td_results.size(); i++) {
@@ -605,6 +660,46 @@ void FinalizeSummary(SubmissionAndResult& sub_and_result, const TaskEntry& task,
       if ((int)res.verdict < (int)td.verdict) res.verdict = td.verdict;
     }
   }
+  if (res.verdict != Verdict::CE) {
+    constexpr int64_t kInfScore = 2'000'000'000'000;
+    res.total_memory = 0;
+    res.total_time = 0;
+    std::vector<int64_t> subtask_scores(sub.group_score.size(), kInfScore);
+    for (size_t i = 0; i < res.td_results.size(); i++) {
+      if (sub.testdata[i].ignore_verdict) continue;
+      auto& td = res.td_results[i];
+      res.total_memory = std::max(res.total_memory, td.rss);
+      res.total_time += td.time;
+      for (int group : sub.testdata[i].td_groups) {
+        subtask_scores[group] = std::min(subtask_scores[group], td.score);
+      }
+    }
+    __int128_t total_score = 0;
+    for (size_t i = 0; i < sub.group_score.size(); i++) {
+      int64_t score = subtask_scores[i];
+      if (score == kInfScore) score = 100'000'000;
+      total_score += (__int128_t)score * sub.group_score[i];
+    }
+    res.total_score = NormalizeScore((long double)total_score / (100'000'000LL * 1'000'000));
+  }
+  if (sub.summary_type == SummaryType::CUSTOM) {
+    auto output_path = SummaryBoxOutput(id);
+    if (!fs::is_regular_file(output_path) || cjail_res.info.si_status != 0) {
+      res.verdict = Verdict::WA;
+      res.total_memory = 0;
+      res.total_time = 0;
+    } else {
+      try {
+        ReadSummaryResult(output_path, res);
+      } catch (nlohmann::json::exception&) {
+        res.verdict = Verdict::WA;
+        res.total_memory = 0;
+        res.total_time = 0;
+      }
+    }
+  }
+  if (sub.remove_submission) RemoveAll(SubmissionCodePath(id));
+  RemoveAll(SubmissionRunPath(id));
   if (auto it = cancelled_list.find(id); it != cancelled_list.end()) {
     // cancelled, don't send anything to server
     cancelled_list.erase(it);

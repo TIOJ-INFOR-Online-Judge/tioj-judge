@@ -473,13 +473,13 @@ bool DealOneSubmission(nlohmann::json&& data) {
 
     // tasks/groups
     auto& tasks = data["tasks"];
-    {
-      for (size_t i = 0; i < tasks.size(); i++) {
-        auto& item = tasks[i];
-        for (auto& td_pos : item["positions"]) {
-          sub.testdata[td_pos.get<int>()].td_groups.push_back(i);
-        }
+    sub.group_score.resize(tasks.size());
+    for (size_t i = 0; i < tasks.size(); i++) {
+      auto& item = tasks[i];
+      for (auto& td_pos : item["positions"]) {
+        sub.testdata[td_pos.get<int>()].td_groups.push_back(i);
       }
+      sub.group_score[i] = item["score"].get<long>();
     }
   } catch (json::exception& err) {
     spdlog::warn("Submission parsing error: {}", err.what());
@@ -600,9 +600,7 @@ void TryFetchSubmission() {
 }
 
 void SendResult(const Submission& sub, const SubmissionResult& res, int subtask) {
-  nlohmann::json data;
-  data["submission_id"] = sub.submission_id;
-  data["results"] = TdResultsJSON(res, subtask);
+  nlohmann::json data{{"submission_id", sub.submission_id}, {"results", TdResultsJSON(res, subtask)}};
   Request req{};
   req.is_unique = true;
   req.key = sub.submission_id;
@@ -612,9 +610,18 @@ void SendResult(const Submission& sub, const SubmissionResult& res, int subtask)
 }
 
 void SendFinalResult(const Submission& sub, const SubmissionResult& res) {
-  nlohmann::json data{{"submission_id", sub.submission_id}, {"verdict", VerdictToAbr(res.verdict)}};
-  if (res.verdict == Verdict::CE || res.verdict == Verdict::CLE) {
+  nlohmann::json data{
+    {"submission_id", sub.submission_id},
+    {"verdict", VerdictToAbr(res.verdict)},
+    {"score", res.total_score},
+    {"total_time", res.total_time},
+    {"total_memory", res.total_memory}
+  };
+  if (res.ce_message.size()) {
     data["message"] = res.ce_message;
+  }
+  if (res.verdict == Verdict::CE || res.verdict == Verdict::CLE) {
+    // nothing
   } else if (res.verdict == Verdict::ER) {
     data["message"] = res.er_message;
   } else {

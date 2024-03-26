@@ -129,6 +129,7 @@ class Submission {
     std::vector<int> td_groups; // which groups it belongs to
   };
   std::vector<TestdataItem> testdata;
+  std::vector<int64_t> group_score; // 10^(-6)
   bool skip_group; // skip a group of testdata if any of them got non-AC
 
   // judge behavior
@@ -183,9 +184,10 @@ class SubmissionResult {
   std::vector<TestdataResult> td_results;
   // overall result
   Verdict verdict;
+  int64_t total_memory, total_time, total_score; // KiB, us, 10^(-6)
   std::string ce_message, er_message;
 
-  SubmissionResult() : verdict(Verdict::NUL) {}
+  SubmissionResult() : verdict(Verdict::NUL), total_memory(0), total_time(0), total_score(0) {}
 };
 
 // Call from main thread

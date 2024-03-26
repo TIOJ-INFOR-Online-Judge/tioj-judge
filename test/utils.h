@@ -56,6 +56,7 @@ class AssertVerdictReporter {
 long SetupSubmission(
     Submission& sub, int id, Compiler lang, long time, bool sandbox_strict, const std::string& code,
     SpecjudgeType spec_type = SpecjudgeType::NORMAL, const std::string& specjudge_code = "",
+    SummaryType summary_type = SummaryType::NONE, const std::string& summary_code = "",
     int submitter_id = 10);
 
 void TeardownSubmission(long id);
