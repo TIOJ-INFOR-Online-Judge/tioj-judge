@@ -253,8 +253,7 @@ void FinalizeCompile(SubmissionAndResult& sub_and_result, const TaskEntry& task,
       bool truncated = total_length > kMaxMsgLen;
       message = std::regex_replace(message, kFilterRegex, kFilterReplace);
       if (truncated) {
-        message += "\n[Error message truncated after " +
-            std::to_string(kMaxMsgLen) + " bytes (total " + std::to_string(total_length) + " bytes)]";
+        message += "\n[Error message truncated after " + std::to_string(kMaxMsgLen) + " bytes]";
       }
       spdlog::debug("Message: {}", message);
     }
@@ -502,7 +501,7 @@ void ReadNewSpecjudgeResult(const fs::path& output_path, SubmissionResult::Testd
   auto ReadNumber = [&](const char* attr, long& target) {
     if (auto it = json.find(attr); it != json.end() && it->is_number()) {
       try {
-        td_result.time = it->get<long>();
+        target = it->get<long>();
       } catch (...) {}
     }
   };
