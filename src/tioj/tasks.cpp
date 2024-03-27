@@ -136,6 +136,7 @@ struct cjail_result RunCompile(const SubmissionAndResult& sub_and_result, const 
   }
   if (char* path = getenv("PATH")) opt.envs.push_back(std::string("PATH=") + path);
   opt.workdir = Workdir("/");
+  opt.input = "/dev/null";
   opt.fd_output = open(CompileBoxMessage(id, subtask).c_str(), O_WRONLY | O_APPEND | O_CREAT, 0666);
   opt.fd_error = opt.fd_output;
   if (cpuid != -1) opt.cpu_set.push_back(cpuid);
@@ -250,6 +251,7 @@ struct cjail_result RunScoring(const SubmissionAndResult& sub_and_result, const 
     }
   }
   opt.workdir = Workdir("/");
+  opt.input = "/dev/null";
   opt.output = ScoringBoxOutput(-1, -1, -1, true);
   opt.error = "/dev/null";
   if (cpuid != -1) opt.cpu_set.push_back(cpuid);
@@ -275,6 +277,7 @@ struct cjail_result RunSummary(const SubmissionAndResult& sub_and_result, const 
   opt.command = ExecuteCommand(sub.summary_lang, program);
   opt.command.push_back(SummaryBoxMetaFile(-1, true));
   opt.workdir = Workdir("/");
+  opt.input = "/dev/null";
   opt.output = SummaryBoxOutput(-1, true);
   opt.error = "/dev/null";
   if (cpuid != -1) opt.cpu_set.push_back(cpuid);

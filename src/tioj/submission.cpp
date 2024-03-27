@@ -190,7 +190,7 @@ inline bool IsCancelled(long id, const std::vector<int>& groups) {
 }
 
 inline long NormalizeScore(long double score) {
-  constexpr long double kMax = 999999.999999L;
+  constexpr long double kMax = 1'000'000;
   if (score > kMax) score = kMax;
   if (score < -kMax) score = -kMax;
   return std::lround(score * 1'000'000);
@@ -200,7 +200,7 @@ inline Compiler GetLang(const Submission& sub, CompileSubtask subtask) {
   switch (subtask) {
     case CompileSubtask::USERPROG: return sub.lang;
     case CompileSubtask::SPECJUDGE: return sub.specjudge_lang;
-    case CompileSubtask::SUMMARY: return sub.specjudge_lang;
+    case CompileSubtask::SUMMARY: return sub.summary_lang;
   }
   __builtin_unreachable();
 }
@@ -274,11 +274,15 @@ void FinalizeCompile(SubmissionAndResult& sub_and_result, const TaskEntry& task,
     sub_res.verdict = Verdict::JE;
   } else if (cjail_res.timekill || cjail_res.oomkill > 0 || cjail_res.info.si_status != 0 ||
       !fs::is_regular_file(CompileBoxOutput(id, subtask, lang))) {
-    if (cjail_res.timekill || cjail_res.oomkill > 0) {
-      sub_res.verdict = subtask == CompileSubtask::USERPROG ? Verdict::CLE : Verdict::ER;
+    Verdict verd;
+    if (subtask != CompileSubtask::USERPROG) {
+      verd = Verdict::ER;
+    } else if (cjail_res.timekill || cjail_res.oomkill > 0) {
+      verd = Verdict::CLE;
     } else {
-      sub_res.verdict = subtask == CompileSubtask::USERPROG ? Verdict::CE : Verdict::ER;
+      verd = Verdict::CE;
     }
+    sub_res.verdict = std::max(sub_res.verdict, verd);
     spdlog::info("Compilation failed: id={} subtask={} verdict={}",
                  id, CompileSubtaskName(subtask), VerdictToAbr(sub_res.verdict));
 
@@ -455,7 +459,13 @@ bool SetupScoring(SubmissionAndResult& sub_and_result, const TaskEntry& task) {
     return false;
   }
   CreateDirs(Workdir(ScoringBoxPath(id, subtask, stage)), fs::perms::all);
-  {
+  // special judge program
+  fs::path specjudge_prog = sub.specjudge_type == SpecjudgeType::NORMAL ?
+      DefaultScoringPath() : CompileBoxOutput(id, CompileSubtask::SPECJUDGE, sub.specjudge_lang);
+  Copy(specjudge_prog, ScoringBoxProgram(id, subtask, stage, sub.specjudge_lang), fs::perms::all);
+  // user code
+  Copy(SubmissionUserCode(id), ScoringBoxUserCode(id, subtask, stage, sub.lang), kPerm666);
+  { // user output
     auto user_output = ExecuteBoxFinalOutput(id, subtask, stage);
     if (sub.specjudge_type == SpecjudgeType::SKIP) {
       Move(user_output, ScoringBoxOutput(id, subtask, stage));
@@ -471,16 +481,11 @@ bool SetupScoring(SubmissionAndResult& sub_and_result, const TaskEntry& task) {
       fs::permissions(scoring_user_output, kPerm666);
     }
   }
-  {
+  { // input and answer
     std::lock_guard lck(td_file_lock[sub.problem_id]);
     Copy(sub.testdata[subtask].input_file, ScoringBoxTdInput(id, subtask, stage), kPerm666);
     Copy(sub.testdata[subtask].answer_file, ScoringBoxTdOutput(id, subtask, stage), kPerm666);
   }
-  Copy(SubmissionUserCode(id), ScoringBoxUserCode(id, subtask, stage, sub.lang), kPerm666);
-  // special judge program
-  fs::path specjudge_prog = sub.specjudge_type == SpecjudgeType::NORMAL ?
-      DefaultScoringPath() : CompileBoxOutput(id, CompileSubtask::SPECJUDGE, sub.specjudge_lang);
-  Copy(specjudge_prog, ScoringBoxProgram(id, subtask, stage, sub.specjudge_lang), fs::perms::all);
   { // write meta file
     std::ofstream fout(ScoringBoxMetaFile(id, subtask, stage));
     fout << sub_and_result.TestdataMeta(subtask, stage);
@@ -638,23 +643,21 @@ bool SetupSummary(SubmissionAndResult& sub_and_result, const TaskEntry& task) {
       if ((int)res.verdict < (int)td.verdict) res.verdict = td.verdict;
     }
   }
-  if (sub.summary_type == SummaryType::NONE) return false;
+  if (sub.summary_type == SummaryType::NONE || res.verdict == Verdict::ER) return false;
 
   long id = sub.submission_internal_id;
   CreateDirs(Workdir(SummaryBoxPath(id)), fs::perms::all);
+  Move(CompileBoxOutput(id, CompileSubtask::SUMMARY, sub.summary_lang),
+       SummaryBoxProgram(id, sub.summary_lang), fs::perms::all);
   Copy(SubmissionUserCode(id), SummaryBoxUserCode(id, sub.lang), kPerm666);
   if (fs::path ce_message_src = CompileBoxMessage(id, CompileSubtask::USERPROG);
       fs::is_regular_file(ce_message_src)) {
-    Copy(ce_message_src, SummaryBoxCEMessage(id), kPerm666);
+    Move(ce_message_src, SummaryBoxCEMessage(id), kPerm666);
   } else {
     // touch file
     std::ofstream(SummaryBoxCEMessage(id)).close();
     fs::permissions(SummaryBoxCEMessage(id), kPerm666);
   }
-  Copy(CompileBoxMessage(id, CompileSubtask::USERPROG),
-       SummaryBoxCEMessage(id), kPerm666);
-  Copy(CompileBoxOutput(id, CompileSubtask::SUMMARY, sub.summary_lang),
-       SummaryBoxProgram(id, sub.summary_lang), fs::perms::all);
   { // write meta file
     std::ofstream fout(SummaryBoxMetaFile(id));
     fout << sub_and_result.SummaryMeta();
@@ -696,13 +699,13 @@ void ReadSummaryResult(const fs::path& output_path, SubmissionResult& res) {
 }
 
 /// Submission tasks env teardown
-void FinalizeSummary(SubmissionAndResult& sub_and_result, const TaskEntry& task, const struct cjail_result& cjail_res) {
+void FinalizeSummary(SubmissionAndResult& sub_and_result, const TaskEntry& task, const struct cjail_result& cjail_res, bool skipped) {
   const Submission& sub = sub_and_result.sub;
   SubmissionResult& res = sub_and_result.result;
   long id = sub.submission_internal_id;
 
   if (res.verdict != Verdict::CE) {
-    constexpr int64_t kInfScore = 2'000'000'000'000;
+    constexpr int64_t kInfScore = 2'000'000'000'000L;
     res.total_memory = 0;
     res.total_time = 0;
     std::vector<int64_t> subtask_scores(sub.group_score.size(), kInfScore);
@@ -723,7 +726,7 @@ void FinalizeSummary(SubmissionAndResult& sub_and_result, const TaskEntry& task,
     }
     res.total_score = NormalizeScore((long double)total_score / (100'000'000LL * 1'000'000));
   }
-  if (sub.summary_type == SummaryType::CUSTOM) {
+  if (!skipped) {
     auto output_path = SummaryBoxOutput(id);
     if (!fs::is_regular_file(output_path) || cjail_res.info.si_status != 0) {
       res.verdict = Verdict::WA;
@@ -765,7 +768,7 @@ void FinalizeTask(long id, const struct cjail_result& res, bool skipped = false)
       case TaskType::COMPILE: FinalizeCompile(sub, entry, res); break;
       case TaskType::EXECUTE: FinalizeExecute(sub, entry, res); break;
       case TaskType::SCORING: FinalizeScoring(sub, entry, res); break;
-      case TaskType::SUMMARY: FinalizeSummary(sub, entry, res); break;
+      case TaskType::SUMMARY: FinalizeSummary(sub, entry, res, skipped); break;
     }
   }
   Remove(entry);

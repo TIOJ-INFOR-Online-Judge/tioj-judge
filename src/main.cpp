@@ -41,7 +41,7 @@ void ParseConfig(const fs::path& conf_path) {
   SetPinnedCPU(ini[""]["pinned_cpus"] | "none");
   kMaxRSS = (ini[""]["max_rss_per_task_mb"] | (kMaxRSS / 1024)) * 1024;
   kMaxOutput = (ini[""]["max_output_per_task_mb"] | (kMaxRSS / 1024)) * 1024;
-  kMaxQueue = ini[""]["max_submission_queue_size"] | kMaxQueue;
+  kMaxQueue = ini[""]["max_submission_queue_size"] | (kMaxParallel + 2);
   kTimeMultiplier = ini[""]["time_multiplier"] | kTimeMultiplier;
   kTIOJUrl = ini[""]["tioj_url"] | kTIOJUrl;
   kTIOJKey = ini[""]["tioj_key"] | kTIOJKey;
