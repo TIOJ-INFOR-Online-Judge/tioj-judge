@@ -28,6 +28,12 @@ inline long ToUs(const struct timeval& v) {
   return ((long)v.tv_sec * 1'000'000 + v.tv_usec) * (long double)kTimeMultiplier;
 }
 
+inline std::string ScoreToString(long score) {
+  std::string frac = std::to_string(score % 1'000'000);
+  frac = std::string(6 - frac.size(), '0') + frac;
+  return std::to_string(score / 1'000'000) + "." + frac;
+}
+
 } // namespace
 
 nlohmann::json SubmissionAndResult::TestdataMeta(int subtask, int stage) const {
@@ -71,8 +77,41 @@ nlohmann::json SubmissionAndResult::TestdataMeta(int subtask, int stage) const {
 }
 
 nlohmann::json SubmissionAndResult::SummaryMeta() const {
-  // TODO
-  return {};
+  nlohmann::json testdata = nlohmann::json::array();
+  for (size_t i = 0; i < result.td_results.size(); i++) {
+    const auto& td_result = result.td_results[i];
+    testdata.push_back({
+      {"verdict", VerdictToAbr(td_result.verdict)},
+      {"score", td_result.score},
+      {"time_us", td_result.time},
+      {"vss_kib", td_result.vss},
+      {"rss_kib", td_result.rss},
+      {"message_type", td_result.message_type},
+      {"message", td_result.message},
+      {"ignore_verdict", sub.testdata[i].ignore_verdict},
+      {"subtasks", sub.testdata[i].td_groups},
+    });
+  }
+  nlohmann::json subtask_scores = nlohmann::json::array();
+  for (long score : sub.group_score) {
+    subtask_scores.push_back(ScoreToString(score));
+  }
+  return {
+    {"user_code_file", SummaryBoxUserCode(-1, sub.lang, true)},
+    {"problem_id", sub.problem_id},
+    {"contest_id", sub.contest_id},
+    {"submission_id", sub.submission_id},
+    {"submitter_id", sub.submitter_id},
+    {"submitter_name", sub.submitter_name},
+    {"submitter_nickname", sub.submitter_nickname},
+    {"submission_time", sub.submission_time},
+    {"compiler", CompilerName(sub.lang)},
+    {"ce_message", result.ce_message},
+    {"ce_message_file", SummaryBoxCEMessage(-1, true)},
+    {"verdict", VerdictToAbr(result.verdict)},
+    {"testdata", testdata},
+    {"subtask_scores", subtask_scores},
+  };
 }
 
 namespace {
@@ -589,6 +628,16 @@ void FinalizeScoring(SubmissionAndResult& sub_and_result, const TaskEntry& task,
 
 bool SetupSummary(SubmissionAndResult& sub_and_result, const TaskEntry& task) {
   const Submission& sub = sub_and_result.sub;
+  SubmissionResult& res = sub_and_result.result;
+
+  if (res.verdict == Verdict::NUL) { // calculate verdict first
+    res.verdict = Verdict::AC;
+    for (size_t i = 0; i < res.td_results.size(); i++) {
+      if (sub.testdata[i].ignore_verdict) continue;
+      auto& td = res.td_results[i];
+      if ((int)res.verdict < (int)td.verdict) res.verdict = td.verdict;
+    }
+  }
   if (sub.summary_type == SummaryType::NONE) return false;
 
   long id = sub.submission_internal_id;
@@ -639,8 +688,8 @@ void ReadSummaryResult(const fs::path& output_path, SubmissionResult& res) {
       } catch (...) {}
     }
   };
-  ReadNumber("total_time", res.total_time);
-  ReadNumber("total_memory", res.total_memory);
+  ReadNumber("total_time_us", res.total_time);
+  ReadNumber("total_memory_kib", res.total_memory);
   if (auto it = json.find("ce_message"); it != json.end() && it->is_string()) {
     res.ce_message = it->get<std::string>();
   }
@@ -652,14 +701,6 @@ void FinalizeSummary(SubmissionAndResult& sub_and_result, const TaskEntry& task,
   SubmissionResult& res = sub_and_result.result;
   long id = sub.submission_internal_id;
 
-  if (res.verdict == Verdict::NUL) {
-    res.verdict = Verdict::AC;
-    for (size_t i = 0; i < res.td_results.size(); i++) {
-      if (sub.testdata[i].ignore_verdict) continue;
-      auto& td = res.td_results[i];
-      if ((int)res.verdict < (int)td.verdict) res.verdict = td.verdict;
-    }
-  }
   if (res.verdict != Verdict::CE) {
     constexpr int64_t kInfScore = 2'000'000'000'000;
     res.total_memory = 0;

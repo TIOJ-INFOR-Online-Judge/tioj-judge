@@ -176,6 +176,7 @@ class SubmissionResult {
     int64_t score; // 10^(-6)
     Verdict verdict;
     std::string message_type, message;
+    // TODO: Internal state passing
     bool skip_stage;
     TestdataResult() :
         execute_result{}, vss{}, rss{}, time{}, score{}, verdict(Verdict::NUL),

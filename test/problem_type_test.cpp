@@ -299,6 +299,6 @@ TEST_F(ExampleProblem, SummaryCustom) {
   };
   long id = SetupSubmission(sub, 5, Compiler::GCC_CPP_17, kTime, true, R"(#include <cstdio>
 int main(){})", SpecjudgeType::NORMAL, "", SummaryType::CUSTOM, R"(#include <cstdio>
-int main(){ puts("{\"verdict\":\"AC\",\"score\":\"23\",\"total_time\":123456,\"ce_message\":\"meow\"}"); })");
+int main(){ puts("{\"verdict\":\"AC\",\"score\":\"23\",\"total_time_us\":123456,\"ce_message\":\"meow\"}"); })");
   RunAndTeardownSubmission(id);
 }
