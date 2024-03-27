@@ -320,6 +320,7 @@ class TempDirectory { // RAII tempdir
   fs::path SpecjudgePath() const { return path_ / "sjcode"; }
   fs::path InterlibPath() const { return path_ / "interlib"; }
   fs::path InterlibImplPath() const { return path_ / "interlib_impl"; }
+  fs::path SummaryPath() const { return path_ / "summary"; }
   TempDirectory() {
     char path[] = "/tmp/tmpsub.XXXXXX";
     char* res = mkdtemp(path);
@@ -388,7 +389,7 @@ bool DealOneSubmission(nlohmann::json&& data) {
     sub.priority = data["priority"].get<long>();
     sub.lang = GetCompiler(data["compiler"].get<std::string>());
     sub.submission_time = data["time"].get<int64_t>();
-    sub.skip_group = data.value("skip_group", false);
+    sub.skip_group = data.value<bool>("skip_group", false);
     {
       std::ofstream fout(tempdir.UserCodePath());
       OutputBase64(fout, data["code_base64"].get<std::string>());
@@ -411,15 +412,18 @@ bool DealOneSubmission(nlohmann::json&& data) {
     } else {
       sub.specjudge_lang = GetCompiler(problem["specjudge_compiler"].get<std::string>());
       sub.judge_between_stages = problem["judge_between_stages"].get<bool>();
-    }
-    sub.interlib_type = (InterlibType)problem["interlib_type"].get<int>();
-    if (sub.specjudge_type != SpecjudgeType::NORMAL) {
       std::ofstream(tempdir.SpecjudgePath()) << problem["sjcode"].get<std::string>();
       sub.specjudge_compile_args = problem["specjudge_compile_args"].get<std::string>();
     }
+    sub.interlib_type = (InterlibType)problem["interlib_type"].get<int>();
     if (sub.interlib_type != InterlibType::NONE) {
       std::ofstream(tempdir.InterlibPath()) << problem["interlib"].get<std::string>();
       std::ofstream(tempdir.InterlibImplPath()) << problem["interlib_impl"].get<std::string>();
+    }
+    sub.summary_type = (SummaryType)problem.value<int>("summary_type", 0);
+    if (sub.summary_type != SummaryType::NONE) {
+      sub.summary_lang = GetCompiler(problem["summary_compiler"].get<std::string>());
+      std::ofstream(tempdir.SummaryPath()) << problem["summary_code"].get<std::string>();
     }
 
     // testdata & limits
@@ -551,6 +555,9 @@ bool DealOneSubmission(nlohmann::json&& data) {
   if (sub.interlib_type != InterlibType::NONE) {
     Move(tempdir.InterlibPath(), SubmissionInterlibCode(sub.submission_internal_id));
     Move(tempdir.InterlibImplPath(), SubmissionInterlibImplCode(sub.submission_internal_id));
+  }
+  if (sub.summary_type != SummaryType::NONE) {
+    Move(tempdir.SummaryPath(), SubmissionSummaryCode(sub.submission_internal_id));
   }
   PushSubmission(std::move(sub));
   return true;
