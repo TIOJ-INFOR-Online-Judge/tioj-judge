@@ -488,7 +488,7 @@ bool SetupScoring(SubmissionAndResult& sub_and_result, const TaskEntry& task) {
   }
   { // write meta file
     std::ofstream fout(ScoringBoxMetaFile(id, subtask, stage));
-    fout << sub_and_result.TestdataMeta(subtask, stage);
+    fout << sub_and_result.TestdataMeta(subtask, stage).dump(-1, ' ', false, nlohmann::json::error_handler_t::ignore);
   }
   return true;
 }
@@ -660,7 +660,7 @@ bool SetupSummary(SubmissionAndResult& sub_and_result, const TaskEntry& task) {
   }
   { // write meta file
     std::ofstream fout(SummaryBoxMetaFile(id));
-    fout << sub_and_result.SummaryMeta();
+    fout << sub_and_result.SummaryMeta().dump(-1, ' ', false, nlohmann::json::error_handler_t::ignore);
   }
   return true;
 }
