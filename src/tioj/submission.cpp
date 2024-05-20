@@ -704,7 +704,8 @@ void FinalizeSummary(SubmissionAndResult& sub_and_result, const TaskEntry& task,
   SubmissionResult& res = sub_and_result.result;
   long id = sub.submission_internal_id;
 
-  if (res.verdict != Verdict::CE) {
+  res.total_score = 0;
+  if ((int)res.verdict < (int)Verdict::CE) {
     constexpr int64_t kInfScore = 2'000'000'000'000L;
     res.total_memory = 0;
     res.total_time = 0;
