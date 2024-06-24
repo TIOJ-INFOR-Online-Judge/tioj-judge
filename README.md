@@ -59,7 +59,7 @@ time_multiplier = 1.0
 pinned_cpus = none
 box_root = /tmp/tioj_box
 submission_root = /tmp/tioj_submissions
-testdata_root = /var/lib/
+testdata_root = /var/lib/tioj-judge
 ```
 
 - The indicated values except `tioj_url`, `tioj_key` are the default values.
@@ -67,6 +67,7 @@ testdata_root = /var/lib/
 - `pinned_cpus` can be a list of CPUs using the same format used in the `cpuset`'s `-c` option (e.g. `0,2-3,6-9:2`), or simply `all` or `none`. If this option is specified, each task (including compiling, execution, etc.) will be pinned to one of the provided CPUs.
 - `box_root`, `submission_root` and `testdata_root` represent the paths for the execution sandbox, submission files, and the storage of downloaded testdata and other persistent information, respectively.
     - Multiple judge clients can be run at the same time by using the `-c` command-line option to specify different paths for each client. It's important to note that unexpected errors could arise if any of these three paths are shared among multiple judge clients.
+    - Before running the judge client on a different `testdata_root`, run the CMake installation process with `-DTIOJ_DATA_DIR=[testdata_root]`, or simply copy `judge-headers`, `default-scoring` and `sandbox-exec` from the original `testdata_root` to the new one.
 
 ### Docker Usage
 
