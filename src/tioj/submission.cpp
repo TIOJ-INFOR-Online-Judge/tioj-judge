@@ -82,7 +82,7 @@ nlohmann::json SubmissionAndResult::SummaryMeta() const {
     const auto& td_result = result.td_results[i];
     testdata.push_back({
       {"verdict", VerdictToAbr(td_result.verdict)},
-      {"score", td_result.score},
+      {"score", ScoreToString(td_result.score)},
       {"time_us", td_result.time},
       {"vss_kib", td_result.vss},
       {"rss_kib", td_result.rss},
