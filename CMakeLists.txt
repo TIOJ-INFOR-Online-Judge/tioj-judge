@@ -87,6 +87,23 @@ find_package(OpenSSL REQUIRED)
 find_package(zstd REQUIRED)
 FetchContent_MakeAvailable_Exclude(spdlog ini httplib websocketpp sqlite_orm argparse)
 
+# detect Haskell version
+find_program(HASKELL_EXECUTABLE ghc)
+if(HASKELL_EXECUTABLE)
+  execute_process(
+    COMMAND ${HASKELL_EXECUTABLE} --numeric-version
+    OUTPUT_VARIABLE HASKELL_VERSION
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+  )
+  if(HASKELL_VERSION VERSION_LESS "9.3")
+    set(HASKELL_PROCESS_LIMIT 1)
+  else()
+    set(HASKELL_PROCESS_LIMIT 2)
+  endif()
+else()
+  set(HASKELL_PROCESS_LIMIT 2)
+endif()
+
 # default scoring
 add_executable(default-scoring "tools/default-scoring.cpp")
 target_link_libraries(default-scoring nlohmann_json::nlohmann_json)
@@ -113,6 +130,7 @@ add_subdirectory(src)
 # judge
 file(GLOB JUDGE_SRC "src/*.cpp" "src/*.h")
 add_executable(tioj-judge ${JUDGE_SRC})
+target_compile_definitions(tioj-judge PRIVATE HASKELL_PROCESS_LIMIT=${HASKELL_PROCESS_LIMIT})
 target_link_libraries(
     tioj-judge libtioj spdlog::spdlog tortellini
     httplib::httplib websocketpp ${OPENSSL_LIBRARIES} zstd
