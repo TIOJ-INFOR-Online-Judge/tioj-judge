@@ -88,16 +88,18 @@ A minimal working C++ example:
 #include <tioj/submission.h>
 
 namespace {
-  void ReportOverallResult(const Submission&, const SubmissionResult &res) {
-    printf("Result: %s\n", VerdictToAbr(res.verdict));
-  }
-  void ReportCEMessage(const Submission&, const SubmissionResult &res) {
-    puts("CE message:");
-    printf("%s\n", res.ce_message.c_str());
-  }
-  const std::filesystem::path kPathToInput = "/tmp/example_input";
-  const std::filesystem::path kPathToOutput = "/tmp/example_output";
+
+void ReportOverallResult(const Submission&, const SubmissionResult &res) {
+  printf("Result: %s\n", VerdictToAbr(res.verdict));
 }
+void ReportCEMessage(const Submission&, const SubmissionResult &res) {
+  puts("CE message:");
+  printf("%s\n", res.ce_message.c_str());
+}
+const std::filesystem::path kPathToInput = "/tmp/example_input";
+const std::filesystem::path kPathToOutput = "/tmp/example_output";
+
+} // namespace
 
 int main() {
   // run as root
@@ -105,12 +107,10 @@ int main() {
   Submission sub;
   sub.submission_internal_id = GetUniqueSubmissionInternalId();
   sub.submission_id = submission_id;
-  sub.lang = Compiler::GCC_CPP_17;
   sub.problem_id = problem_id;
   sub.specjudge_type = SpecjudgeType::NORMAL;
   sub.interlib_type = InterlibType::NONE;
-  // create input & output
-  {
+  { // create input & output
     std::ofstream td_input(kPathToInput);
     td_input << "1 2" << std::endl;
     std::ofstream td_output(kPathToOutput);
@@ -130,14 +130,15 @@ int main() {
   sub.remove_submission = true;
   sub.reporter.ReportOverallResult = ReportOverallResult;
   sub.reporter.ReportCEMessage = ReportCEMessage;
-  {
-    std::filesystem::create_directory(SubmissionCodePath(sub.submission_internal_id));
+  sub.lang = Compiler::GCC_CPP_17;
+  { // submission code
+    std::filesystem::create_directories(SubmissionCodePath(sub.submission_internal_id));
     std::ofstream code(SubmissionUserCode(sub.submission_internal_id));
     code << R"(#include <cstdio>
 int main() {
-    int a, b; scanf("%d%d", &a, &b);
-    printf("%d\n", a + b);
-    return 0;
+  int a, b; scanf("%d%d", &a, &b);
+  printf("%d\n", a + b);
+  return 0;
 }
 )";
   }
@@ -147,4 +148,4 @@ int main() {
 }
 ```
 
-Remember to `-I /usr/local/include` (or the destination assigned during installation) and link `-ltioj -lpthread` when compiling.
+Remember to add the header search directory `-I/usr/local/include` (or the destination assigned during installation) and link `-ltioj -lpthread` when compiling.

@@ -1,6 +1,7 @@
 - [x] Add option to stop on first non-AC testdata of each task (TODO FEATURE(group))
 - [x] Download compressed testdata
 - [x] User-specified compilation flags (special judge / user program)
+- [ ] SIGINT waits for current judge queue to complete
 - [ ] Pin judge (platform-independent judge result)
 - [ ] I/O Interactive (TODO FEATURE(io-interactive))
     - I/O interactive should also support multistage (similar to that of CMS Communication)
