@@ -81,20 +81,23 @@ A minimal working C++ example:
 
 ```c++
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 #include <tioj/paths.h>
 #include <tioj/utils.h>
 #include <tioj/submission.h>
 
-// Callbacks for judge results
-class MyReporter : public Reporter {
-  void ReportOverallResult(const Submission& sub) override {
-    printf("Result: %s\n", VerdictToAbr(sub.verdict));
+namespace {
+  void ReportOverallResult(const Submission&, const SubmissionResult &res) {
+    printf("Result: %s\n", VerdictToAbr(res.verdict));
   }
-  void ReportCEMessage(const Submission& sub) override {
+  void ReportCEMessage(const Submission&, const SubmissionResult &res) {
     puts("CE message:");
-    printf("%s\n", sub.ce_message.c_str());
+    printf("%s\n", res.ce_message.c_str());
   }
-} reporter;
+  const std::filesystem::path kPathToInput = "/tmp/example_input";
+  const std::filesystem::path kPathToOutput = "/tmp/example_output";
+}
 
 int main() {
   // run as root
@@ -106,11 +109,18 @@ int main() {
   sub.problem_id = problem_id;
   sub.specjudge_type = SpecjudgeType::NORMAL;
   sub.interlib_type = InterlibType::NONE;
+  // create input & output
+  {
+    std::ofstream td_input(kPathToInput);
+    td_input << "1 2" << std::endl;
+    std::ofstream td_output(kPathToOutput);
+    td_output << "3" << std::endl;
+  }
   for (int i = 0; i < num_td; i++) {
     // submission files & limits
     Submission::TestdataItem td;
-    td.input_file = "/path/to/input";
-    td.answer_file = "/path/to/output";
+    td.input_file = kPathToInput; // all same input & output
+    td.answer_file = kPathToOutput;
     td.vss = 65536; // 64 KiB
     td.rss = 0;
     td.output = 65536;
@@ -118,10 +128,18 @@ int main() {
     sub.testdata.push_back(td);
   }
   sub.remove_submission = true;
-  sub.reporter = &reporter;
-  { // submission files
-    // mkdir SubmissionCodePath(sub.submission_internal_id)
-    // write submission code into SubmissionUserCode(sub.submission_internal_id)
+  sub.reporter.ReportOverallResult = ReportOverallResult;
+  sub.reporter.ReportCEMessage = ReportCEMessage;
+  {
+    std::filesystem::create_directory(SubmissionCodePath(sub.submission_internal_id));
+    std::ofstream code(SubmissionUserCode(sub.submission_internal_id));
+    code << R"(#include <cstdio>
+int main() {
+    int a, b; scanf("%d%d", &a, &b);
+    printf("%d\n", a + b);
+    return 0;
+}
+)";
   }
   // note that all paths can be symbolic links
   PushSubmission(std::move(sub));
@@ -129,4 +147,4 @@ int main() {
 }
 ```
 
-Remember to link `-ltioj -lpthread` when compiling.
+Remember to `-I /usr/local/include` (or the destination assigned during installation) and link `-ltioj -lpthread` when compiling.
