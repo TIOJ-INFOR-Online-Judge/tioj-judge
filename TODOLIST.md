@@ -2,6 +2,7 @@
 - [x] Download compressed testdata
 - [x] User-specified compilation flags (special judge / user program)
 - [ ] SIGINT waits for current judge queue to complete
+- [ ] Kattis / Polygon / CMS(?)-style special judge
 - [ ] Pin judge (platform-independent judge result)
 - [ ] I/O Interactive (TODO FEATURE(io-interactive))
     - I/O interactive should also support multistage (similar to that of CMS Communication)

@@ -49,7 +49,12 @@ void ParseConfig(const fs::path& conf_path) {
 
 void ParseArgs(int argc, char** argv) {
   int verbosity = 0;
-  argparse::ArgumentParser parser(argc ? argv[0] : "tioj-judge");
+  argparse::ArgumentParser parser(
+      argc ? argv[0] : "tioj-judge", kVersionCode, argparse::default_arguments::help);
+  parser.add_argument("--version")
+    .default_value(false)
+    .implicit_value(true)
+    .help("Show version and exit");
   parser.add_argument("-c", "--config")
     .required().default_value(std::string("/etc/tioj-judge.conf"))
     .help("Path of configuration file");
@@ -78,6 +83,10 @@ void ParseArgs(int argc, char** argv) {
     exit(1);
   }
 
+  if (parser["--version"] == true) {
+    std::cout << kVersionCode << std::endl;
+    exit(0);
+  }
   switch (verbosity) {
     case 0: spdlog::set_level(spdlog::level::warn); break;
     case 1: spdlog::set_level(spdlog::level::info); break;
@@ -127,11 +136,11 @@ bool LockFile() {
 int main(int argc, char** argv) {
   spdlog::set_pattern("[%t] %+");
   InitLogger();
+  ParseArgs(argc, argv);
   if (geteuid() != 0) {
     spdlog::error("Must be run as root.");
     return 1;
   }
-  ParseArgs(argc, argv);
   if (to_lock && !LockFile()) {
     spdlog::error("Another judge instance is running.");
     return 1;
