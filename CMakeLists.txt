@@ -68,7 +68,8 @@ FetchContent_Declare(
 )
 FetchContent_Declare(
   websocketpp
-  URL "https://github.com/zaphoyd/websocketpp/archive/refs/tags/0.8.2.zip"
+  GIT_REPOSITORY "https://github.com/amini-allight/websocketpp.git"
+  GIT_TAG "ee8cf4257e001d939839cff5b1766a835b749cd6"
 )
 FetchContent_Declare(
   sqlite_orm
@@ -88,6 +89,8 @@ endif()
 find_package(OpenSSL REQUIRED)
 find_package(zstd REQUIRED)
 FetchContent_MakeAvailable_Exclude(spdlog ini httplib websocketpp sqlite_orm argparse)
+
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/build/_deps/websocketpp-src)
 
 # detect Haskell version
 find_program(HASKELL_EXECUTABLE ghc)
@@ -135,8 +138,8 @@ add_executable(tioj-judge ${JUDGE_SRC})
 target_compile_definitions(tioj-judge PRIVATE HASKELL_PROCESS_LIMIT=${HASKELL_PROCESS_LIMIT})
 target_link_libraries(
     tioj-judge libtioj spdlog::spdlog tortellini
-    httplib::httplib websocketpp ${OPENSSL_LIBRARIES} zstd
-    sqlite_orm::sqlite_orm argparse::argparse)
+    httplib::httplib ${OPENSSL_LIBRARIES} zstd
+    sqlite_orm::sqlite_orm argparse::argparse jitterentropy)
 install(TARGETS tioj-judge DESTINATION bin)
 
 # testing
@@ -151,6 +154,7 @@ if(TIOJ_BUILD_TESTS)
 
   file(GLOB TEST_SRC "test/*.cpp" "test/*.h")
   add_executable(judge-test ${TEST_SRC})
+  target_compile_definitions(judge-test PRIVATE HASKELL_PROCESS_LIMIT=${HASKELL_PROCESS_LIMIT})
   target_link_libraries(judge-test gtest_main libtioj spdlog::spdlog)
 
   include(GoogleTest)

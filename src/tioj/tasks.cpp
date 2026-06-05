@@ -211,6 +211,7 @@ struct cjail_result RunExecute(const SubmissionAndResult& sub_and_result, const 
     if (lang == Compiler::PYTHON2 || lang == Compiler::PYTHON3) {
       // TODO: is it possible to run without /usr/bin and /bin? (maybe copy python executable to workdir)
       opt.dirs = {"/usr", "/lib", "/lib64", "/etc/alternatives", "/bin"};
+      if (char* path = getenv("PATH")) opt.envs.push_back(std::string("PATH=") + path);
     }
     int fd_input = open(ExecuteBoxInput(id, subtask, stage, sub.sandbox_strict).c_str(), O_RDONLY);
     int fd_output = open(ExecuteBoxOutput(id, subtask, stage, sub.sandbox_strict).c_str(), O_WRONLY | O_CREAT, 0600);
@@ -226,6 +227,7 @@ struct cjail_result RunExecute(const SubmissionAndResult& sub_and_result, const 
     opt.error = "/dev/null";
   } else {
     opt.dirs = {"/usr", "/lib", "/lib64", "/etc/alternatives", "/bin"};
+    if (char* path = getenv("PATH")) opt.envs.push_back(std::string("PATH=") + path);
     opt.input = ExecuteBoxInput(-1, -1, -1, sub.sandbox_strict, true);
     opt.output = ExecuteBoxOutput(-1, -1, -1, sub.sandbox_strict, true);
     opt.error = ExecuteBoxError(-1, -1, -1, true);
