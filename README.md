@@ -22,15 +22,17 @@
 
 ### Prerequisites
 
-On Ubuntu 22.04, you can use the following command to install the dependencies.
+On Ubuntu 26.04, you can use the following command to install the dependencies.
 
 ```bash
 apt update
 apt install -y git g++ cmake ninja-build \
-  libseccomp-dev libnl-genl-3-dev libsqlite3-dev libz-dev libssl-dev \
+  libseccomp-dev libnl-genl-3-dev libsqlite3-dev libz-dev libssl-dev libjitterentropy3-dev \
   libboost-all-dev libzstd-dev \
-  ghc python2 python3 python3-numpy python3-pil rustc
+  ghc python3 python3-numpy python3-pil rustc
 ```
+
+Ubuntu 26.04 no longer packages Python 2. The Docker image builds Python 2.7.18 from source to retain support for Python 2 submissions; native installations need to provide `python2` separately.
 
 ### Installation
 
