@@ -5,6 +5,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include <wordexp.h>
+#include <limits>
 #include <map>
 #include <unordered_map>
 
@@ -14,6 +15,9 @@
 #include "utils.h"
 
 namespace {
+
+constexpr long kRssLimitMargin = 1024;
+constexpr long kVssLimitMargin = 2048;
 
 std::vector<std::string> GccCompileCommand(Compiler lang, const std::string& input,
                                            const std::string& interlib, const std::string& output,
@@ -217,13 +221,23 @@ struct cjail_result RunExecute(const SubmissionAndResult& sub_and_result, const 
   opt.wall_time /= kTimeMultiplier;
   opt.cpu_time /= kTimeMultiplier;
   if (opt.cpu_time <= 0) opt.cpu_time = 1; // avoid being regarded as no limit
-  opt.rss = lim.rss + 1024;
-  if (lim.rss == 0 || opt.rss > kMaxRSS) opt.rss = kMaxRSS;
-  opt.vss = lim.vss ? lim.vss + 2048 : 0; // add some margin so we can determine whether it is MLE
+  if (lim.rss <= 0 || lim.rss >= kMaxRSS || kMaxRSS - lim.rss <= kRssLimitMargin) {
+    opt.rss = kMaxRSS;
+  } else {
+    opt.rss = static_cast<long>(lim.rss) + kRssLimitMargin;
+  }
+  // Add some margin so we can determine whether it is MLE, saturating to avoid signed overflow.
+  if (lim.vss <= 0) {
+    opt.vss = 0;
+  } else if (lim.vss > std::numeric_limits<long>::max() - kVssLimitMargin) {
+    opt.vss = std::numeric_limits<long>::max();
+  } else {
+    opt.vss = static_cast<long>(lim.vss) + kVssLimitMargin;
+  }
   opt.proc_num = sub.process_limit;
   // file limit is not needed since we have already limited the total size by mounting tmpfs
   opt.fsize = lim.output;
-  if (opt.fsize == 0 || opt.fsize > kMaxOutput) opt.fsize = kMaxOutput;
+  if (opt.fsize <= 0 || opt.fsize > kMaxOutput) opt.fsize = kMaxOutput;
   if (sub.sandbox_strict) {
     if (lang == Compiler::PYTHON2 || lang == Compiler::PYTHON3) {
       // TODO: is it possible to run without /usr/bin and /bin? (maybe copy python executable to workdir)

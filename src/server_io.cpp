@@ -507,9 +507,9 @@ bool DealOneSubmission(nlohmann::json&& data) {
         // limits
         auto& lim = sub.testdata[i];
         lim.time = td_item["time"].get<int64_t>();
-        lim.vss = td_item["vss"].get<int64_t>();
-        lim.rss = td_item["rss"].get<int64_t>();
-        lim.output = td_item["output"].get<int64_t>();
+        lim.vss = std::max<int64_t>(td_item["vss"].get<int64_t>(), 0);
+        lim.rss = std::max<int64_t>(td_item["rss"].get<int64_t>(), 0);
+        lim.output = std::max<int64_t>(td_item["output"].get<int64_t>(), 0);
         if (sub.lang == Compiler::HASKELL && lim.vss > 0) {
           // Haskell uses a lot of VSS, thus we limit RSS instead
           lim.rss = lim.rss == 0 ? lim.vss : std::min(lim.vss, lim.rss);
