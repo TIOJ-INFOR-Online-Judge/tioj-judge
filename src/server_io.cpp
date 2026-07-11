@@ -1,5 +1,6 @@
 #include "server_io.h"
 
+#include <algorithm>
 #include <chrono>
 #include <condition_variable>
 #include <list>
@@ -442,9 +443,12 @@ bool DealOneSubmission(nlohmann::json&& data) {
     auto& problem = data["problem"];
     sub.problem_id = problem["id"].get<int>();
     sub.sandbox_strict = problem["strict_mode"].get<bool>();
-    sub.stages = problem["num_stages"].get<int>();
+    sub.stages = std::clamp(problem["num_stages"].get<int>(), 1, 32);
 
     sub.problem_prog_stages = problem.value<std::set<int>>("problem_prog_stages", {});
+    for (int s : sub.problem_prog_stages) {
+      if (s < 0 || s >= sub.stages) return false;
+    }
     if (sub.problem_prog_stages.size() > 0) {
       sub.problem_prog_lang = GetCompiler(problem["problem_prog_compiler"].get<std::string>());
       std::ofstream(tempdir.ProbProgPath()) << problem["problem_prog_code"].get<std::string>();
