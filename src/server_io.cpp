@@ -533,7 +533,9 @@ bool DealOneSubmission(nlohmann::json&& data) {
     for (size_t i = 0; i < tasks.size(); i++) {
       auto& item = tasks[i];
       for (auto& td_pos : item["positions"]) {
-        sub.testdata[td_pos.get<int>()].td_groups.push_back(i);
+        int p = td_pos.get<int>();
+        if (p < 0 || p >= td_count) return false;
+        sub.testdata[p].td_groups.push_back(i);
       }
       sub.group_score[i] = item["score"].get<long>();
     }
