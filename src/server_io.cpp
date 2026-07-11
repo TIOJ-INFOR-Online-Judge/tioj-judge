@@ -4,6 +4,7 @@
 #include <condition_variable>
 #include <list>
 #include <mutex>
+#include <system_error>
 
 #include <httplib.h>
 #include <spdlog/fmt/bundled/core.h>
@@ -245,7 +246,11 @@ class TIOJClient : public WsClient {
     if (msg_type == "notify") {
       TryFetchSubmission();
     } else if (msg_type == "submission") {
-      std::thread(OneSubmissionThread, std::move(data["message"]["data"])).detach();
+      try {
+        std::thread(OneSubmissionThread, std::move(data["message"]["data"])).detach();
+      } catch (const std::system_error&) {
+        spdlog::warn("Dropping submission frame: thread limit reached");
+      }
     }
   }
 
