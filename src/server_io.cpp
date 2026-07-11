@@ -140,22 +140,29 @@ std::mutex judge_mtx;
 bool DealOneSubmission(nlohmann::json&& data);
 
 void OneSubmissionThread(nlohmann::json&& data) {
-  int submission_id = data["submission_id"].get<int>();
-  std::lock_guard lck(judge_mtx);
-  // optionally reject submission here
-  if (CurrentSubmissionQueueSize() >= kMaxQueue) {
-    SendStatus(submission_id, "queued");
-    return;
-  }
-  if (CurrentSubmissionQueueSize() + 1 < kMaxQueue) TryFetchSubmission();
-  bool success = false;
   try {
-    success = DealOneSubmission(std::move(data));
-  } catch (...) {
-  }
-  if (!success) {
-    // send JE
-    SendStatus(submission_id, VerdictToAbr(Verdict::JE));
+    const int submission_id = data.at("submission_id").get<int>();
+    std::lock_guard lck(judge_mtx);
+    if (CurrentSubmissionQueueSize() >= kMaxQueue) {
+      SendStatus(submission_id, "queued");
+      return;
+    }
+    if (CurrentSubmissionQueueSize() + 1 < kMaxQueue) {
+      TryFetchSubmission();
+    }
+    auto try_deal_submission = [&] {
+      try {
+        return DealOneSubmission(std::move(data));
+      } catch (...) {
+        return false;
+      }
+    };
+    if (!try_deal_submission()) {
+      SendStatus(submission_id, VerdictToAbr(Verdict::JE));
+      TryFetchSubmission();
+    }
+  } catch (const nlohmann::json::exception& err) {
+    spdlog::warn("Submission parsing error: {}", err.what());
     TryFetchSubmission();
   }
 }
