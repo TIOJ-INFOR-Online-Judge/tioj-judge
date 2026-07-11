@@ -7,6 +7,9 @@
 
 #include <cjail/cjail.h>
 
+constexpr int kUidBase = 50000;
+constexpr int kUidPoolSize = 100;
+
 class SandboxOptions;
 class CJailCtxClass {
  private:

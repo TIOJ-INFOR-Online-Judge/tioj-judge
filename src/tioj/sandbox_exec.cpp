@@ -1,11 +1,46 @@
 #include "sandbox_exec.h"
 
+#include <errno.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
 #include <spdlog/fmt/bundled/ranges.h>
 #include <spdlog/spdlog.h>
 #include <tioj/paths.h>
+
+namespace {
+
+constexpr long kMaxPayload = 1 << 20;
+
+bool ReadFull(int fd, void* buf, size_t n) {
+  size_t got = 0;
+  while (got < n) {
+    ssize_t r = read(fd, static_cast<char*>(buf) + got, n - got);
+    if (r < 0) {
+      if (errno == EINTR) continue;
+      return false;
+    }
+    if (r == 0) return false;
+    got += static_cast<size_t>(r);
+  }
+  return true;
+}
+
+bool WriteFull(int fd, const void* buf, size_t n) {
+  size_t put = 0;
+  while (put < n) {
+    ssize_t w = write(fd, static_cast<const char*>(buf) + put, n - put);
+    if (w < 0) {
+      if (errno == EINTR) continue;
+      return false;
+    }
+    if (w == 0) return false;
+    put += static_cast<size_t>(w);
+  }
+  return true;
+}
+
+} // namespace
 
 struct cjail_result SandboxExec(const SandboxOptions& opt) {
   struct cjail_result ret = {};
@@ -31,9 +66,10 @@ struct cjail_result SandboxExec(const SandboxOptions& opt) {
     close(outpipe[0]);
     auto vec = opt.Serialize();
     long size = vec.size();
-    if (write(outpipe[1], &size, sizeof(size)) < 0 || write(outpipe[1], vec.data(), vec.size()) < 0 ||
-        read(inpipe[0], &ret, sizeof(ret)) < 0) {
-      kill(SIGKILL, pid);
+    if (vec.empty() || vec.size() > static_cast<size_t>(kMaxPayload) ||
+        !WriteFull(outpipe[1], &size, sizeof(size)) || !WriteFull(outpipe[1], vec.data(), vec.size()) ||
+        !ReadFull(inpipe[0], &ret, sizeof(ret))) {
+      kill(pid, SIGKILL);
       waitpid(pid, nullptr, 0);
       goto err;
     }

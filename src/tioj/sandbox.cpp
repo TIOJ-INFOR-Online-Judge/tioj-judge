@@ -54,6 +54,10 @@ void SandboxOptions::FilterDirs() {
 }
 
 std::vector<uint8_t> SandboxOptions::Serialize() const {
+  if (uid < kUidBase || uid >= kUidBase + kUidPoolSize || gid < kUidBase ||
+      gid >= kUidBase + kUidPoolSize)
+    return {};
+
   std::vector<uint8_t> ret;
   auto AddLenWrite = [&](size_t len, Int r) {
     Int cur = ret.size();
