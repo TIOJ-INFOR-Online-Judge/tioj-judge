@@ -181,10 +181,12 @@ struct cjail_result RunCompile(const SubmissionAndResult& sub_and_result, const 
   opt.rss = kMaxRSS;
   opt.proc_num = 10;
   opt.fsize = kMaxOutput;
-  opt.dirs = {"/usr", "/var/lib", "/lib", "/lib64", "/etc/alternatives", "/bin"};
+  opt.dirs = {"/usr", "/lib", "/lib64", "/etc/alternatives", "/bin"};
+  if (lang == Compiler::HASKELL) {
+    opt.dirs.push_back("/var/lib/ghc");
+  }
   opt.FilterDirs();
   return SandboxExec(opt);
-  // we don't need to close the opened files because the process is about to terminate
 }
 
 // TODO FEATURE(io-interactive): fork & run multiple cjails and merge them into one cjail_result
