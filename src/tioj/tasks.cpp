@@ -370,7 +370,6 @@ struct cjail_result RunSummary(const SubmissionAndResult& sub_and_result, const 
 }
 
 /// parent
-constexpr int kUidBase = 50000, kUidPoolSize = 100;
 std::vector<int> uid_pool, cpuid_pool;
 bool pool_init = false;
 
