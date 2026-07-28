@@ -145,6 +145,7 @@ void OneSubmissionThread(nlohmann::json&& data) {
   try {
     const int submission_id = data.at("submission_id").get<int>();
     std::lock_guard lck(judge_mtx);
+    // optionally reject submission here
     if (CurrentSubmissionQueueSize() >= kMaxQueue) {
       SendStatus(submission_id, "queued");
       return;
