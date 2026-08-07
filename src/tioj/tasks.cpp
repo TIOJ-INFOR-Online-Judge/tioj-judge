@@ -29,6 +29,7 @@ std::vector<std::string> GccCompileCommand(Compiler lang, const std::string& inp
     case Compiler::GCC_CPP_14: prog = "g++", std = "-std=c++14"; break;
     case Compiler::GCC_CPP_17: prog = "g++", std = "-std=c++17"; break;
     case Compiler::GCC_CPP_20: prog = "g++", std = "-std=c++20"; break;
+    case Compiler::GCC_CPP_23: prog = "g++", std = "-std=c++23"; break;
     case Compiler::GCC_C_90: prog = "gcc", std = "-ansi"; break;
     case Compiler::GCC_C_99: prog = "gcc", std = "-std=c99"; break;
     case Compiler::GCC_C_11: prog = "gcc", std = "-std=c11"; break;
@@ -50,6 +51,7 @@ std::vector<std::string> ExecuteCommand(Compiler lang, const std::string& progra
     case Compiler::GCC_CPP_14: [[fallthrough]];
     case Compiler::GCC_CPP_17: [[fallthrough]];
     case Compiler::GCC_CPP_20: [[fallthrough]];
+    case Compiler::GCC_CPP_23: [[fallthrough]];
     case Compiler::GCC_C_90: [[fallthrough]];
     case Compiler::GCC_C_99: [[fallthrough]];
     case Compiler::GCC_C_11: [[fallthrough]];
@@ -127,6 +129,7 @@ struct cjail_result RunCompile(const SubmissionAndResult& sub_and_result, const 
     case Compiler::GCC_CPP_14: [[fallthrough]];
     case Compiler::GCC_CPP_17: [[fallthrough]];
     case Compiler::GCC_CPP_20: [[fallthrough]];
+    case Compiler::GCC_CPP_23: [[fallthrough]];
     case Compiler::GCC_C_90: [[fallthrough]];
     case Compiler::GCC_C_99: [[fallthrough]];
     case Compiler::GCC_C_11: [[fallthrough]];
