@@ -648,9 +648,8 @@ bool DealOneSubmission(nlohmann::json&& data) {
   if (sub.problem_prog_stages.size()) {
     Move(tempdir.ProbProgPath(), SubmissionProblemProgCode(sub.submission_internal_id));
   }
-  int submission_id = sub.submission_id;
+  if (!waiting_to_queued) SendStatus(sub.submission_id, "queued");
   PushSubmission(std::move(sub));
-  if (!waiting_to_queued) SendStatus(submission_id, "queued");
   return true;
 }
 
