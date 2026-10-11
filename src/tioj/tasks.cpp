@@ -315,6 +315,8 @@ struct cjail_result RunScoring(const SubmissionAndResult& sub_and_result, const 
                        {
                            ScoringBoxTdInput(-1, -1, -1, true),
                            ScoringBoxTdOutput(-1, -1, -1, true),
+                           // Kattis PPF requires trailing slash
+                           // https://icpc.io/problem-package-format/spec/2025-09.html#invocation-1
                            ScoringBoxTempdir(-1, -1, -1, true) / "",
                            // Kattis PPF allows additional arguments, so we use it to pass in metadata
                            ScoringBoxMetaFile(-1, -1, -1, true),
