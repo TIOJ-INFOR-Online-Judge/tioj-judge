@@ -315,7 +315,7 @@ struct cjail_result RunScoring(const SubmissionAndResult& sub_and_result, const 
                        {
                            ScoringBoxTdInput(-1, -1, -1, true),
                            ScoringBoxTdOutput(-1, -1, -1, true),
-                           ScoringBoxTempdir(-1, -1, -1, true),
+                           ScoringBoxTempdir(-1, -1, -1, true) / "",
                            // Kattis PPF allows additional arguments, so we use it to pass in metadata
                            ScoringBoxMetaFile(-1, -1, -1, true),
                        });

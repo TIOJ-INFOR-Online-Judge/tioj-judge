@@ -347,7 +347,7 @@ int main(int argc, char** argv){
     judge_ans >> b;
     if (a-stage-1 == b) accept();
   } else {
-    std::ofstream(std::string(argv[3]) + "/nextpass.in") << (a - stage-1);
+    std::ofstream(std::string(argv[3]) + "nextpass.in") << (a - stage-1);
     accept();
   }
 }
