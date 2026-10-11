@@ -24,6 +24,10 @@ double kTimeMultiplier = 1.0;
 
 namespace {
 
+inline bool IsRegularFileNoFollow(const fs::path& path) {
+  return fs::is_regular_file(fs::symlink_status(path));
+}
+
 inline long ToUs(const struct timeval& v) {
   return ((long)v.tv_sec * 1'000'000 + v.tv_usec) * (long double)kTimeMultiplier;
 }
@@ -293,7 +297,7 @@ void FinalizeCompile(SubmissionAndResult& sub_and_result, const TaskEntry& task,
   if (cjail_res.timekill == -1) {
     sub_res.verdict = Verdict::JE;
   } else if (cjail_res.timekill || cjail_res.oomkill > 0 || cjail_res.info.si_status != 0 ||
-             !fs::is_regular_file(CompileBoxOutput(id, subtask, lang))) {
+             !IsRegularFileNoFollow(CompileBoxOutput(id, subtask, lang))) {
     Verdict verd;
     if (subtask != CompileSubtask::USERPROG) {
       verd = Verdict::JCE;
@@ -308,7 +312,7 @@ void FinalizeCompile(SubmissionAndResult& sub_and_result, const TaskEntry& task,
 
     fs::path path = CompileBoxMessage(id, subtask);
     std::string message;
-    if (fs::is_regular_file(path)) {
+    if (IsRegularFileNoFollow(path)) {
       size_t total_length = fs::file_size(path);
       char buf[kMaxMsgLen];
       std::ifstream fin(path);
@@ -417,10 +421,17 @@ void FinalizeExecute(SubmissionAndResult& sub_and_result, const TaskEntry& task,
   if (subtask >= (int)sub_res.td_results.size()) sub_res.td_results.resize(subtask + 1);
   auto& td_result = sub_res.td_results[subtask];
   td_result.execute_result = cjail_res;
-  Move(ExecuteBoxOutput(id, subtask, stage, sub.sandbox_strict), ExecuteBoxFinalOutput(id, subtask, stage));
-  IGNORE_RETURN(chown(ExecuteBoxFinalOutput(id, subtask, stage).c_str(), 0, 0));
   {
+    auto output_path = ExecuteBoxOutput(id, subtask, stage, sub.sandbox_strict);
+    auto output_dest = ExecuteBoxFinalOutput(id, subtask, stage);
     auto workdir = Workdir(ExecuteBoxPath(id, subtask, stage));
+    if (IsRegularFileNoFollow(output_path)) {
+      Move(output_path, output_dest, kPerm666);
+    } else { // non-regular files treated as empty file
+      std::ofstream(output_dest).close();
+      fs::permissions(output_dest, kPerm666);
+    }
+    IGNORE_RETURN(chown(output_dest.c_str(), 0, 0));
     if (!sub.sandbox_strict) Umount(workdir);
     RemoveAll(workdir);
   }
@@ -679,7 +690,7 @@ void ReadKattisSpecjudgeResult(int code, const fs::path& output_path, const fs::
     SetACOrContinue(last_stage, td_result);
     if (!last_stage) {
       fs::path nextpass_path = judge_dir / "nextpass.in";
-      if (fs::is_regular_file(nextpass_path)) {
+      if (IsRegularFileNoFollow(nextpass_path)) {
         Move(nextpass_path, user_output_path);
       } else {
         // no nextpass.in = immediate success
@@ -712,7 +723,7 @@ void ReadSpecjudgeResult(const Submission& sub, const siginfo_t& info, bool last
                          const fs::path& output_path, const fs::path& user_output_path,
                          const fs::path& tempdir_path, SubmissionResult::TestdataResult& td_result) {
   Verdict jre_verdict = sub.specjudge_re_as_wa ? Verdict::WA : Verdict::JRE;
-  if (!fs::is_regular_file(output_path) || info.si_code != CLD_EXITED ||
+  if (!IsRegularFileNoFollow(output_path) || info.si_code != CLD_EXITED ||
       (sub.specjudge_type != SpecjudgeType::SPECJUDGE_POLYGON &&
        sub.specjudge_type != SpecjudgeType::SPECJUDGE_KATTIS && info.si_status != 0) ||
       (sub.specjudge_type == SpecjudgeType::SPECJUDGE_POLYGON && info.si_status == 3) ||
@@ -815,7 +826,7 @@ bool SetupSummary(SubmissionAndResult& sub_and_result, const TaskEntry& task) {
        SummaryBoxProgram(id, sub.summary_lang), fs::perms::all);
   Copy(SubmissionUserCode(id), SummaryBoxUserCode(id, sub.lang), kPerm666);
   if (fs::path ce_message_src = CompileBoxMessage(id, CompileSubtask::USERPROG);
-      fs::is_regular_file(ce_message_src)) {
+      IsRegularFileNoFollow(ce_message_src)) {
     Move(ce_message_src, SummaryBoxCEMessage(id), kPerm666);
   } else {
     // touch file
@@ -896,7 +907,7 @@ void FinalizeSummary(SubmissionAndResult& sub_and_result, const TaskEntry& task,
   }
   if (!skipped) {
     auto output_path = SummaryBoxOutput(id);
-    if (!fs::is_regular_file(output_path) || cjail_res.info.si_status != 0) {
+    if (!IsRegularFileNoFollow(output_path) || cjail_res.info.si_status != 0) {
       res.verdict = Verdict::JRE;
       res.total_memory = 0;
       res.total_time = 0;
