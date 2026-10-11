@@ -4,7 +4,7 @@
 #include <string>
 #include "tioj/submission.h"
 
-const std::string kVersionCode = "2.3.2";
+const std::string kVersionCode = "2.4.0";
 extern std::string kTIOJUrl;
 extern std::string kTIOJKey;
 extern size_t kMaxQueue;

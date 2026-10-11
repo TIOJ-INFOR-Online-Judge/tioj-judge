@@ -17,6 +17,7 @@
 #include "http_utils.h"
 #include "paths.h"
 #include "tioj/paths.h"
+#include "tioj/submission.h"
 #include "tioj/utils.h"
 #include "websocket.h"
 
@@ -136,8 +137,23 @@ void ResendBackupRequests() {
   request_queue.splice(request_queue.begin(), backup_queue);
 }
 
+// backward compat: JCE -> ER for < 3.5.0
+bool jce_to_er = true;
+inline std::string VerdictToAbrCompat(Verdict verdict) {
+  if (jce_to_er && verdict == Verdict::JCE) return "ER";
+  return VerdictToAbr(verdict);
+}
+
+// backward compat: waiting -> queued for < 3.5.3
+bool submitted_to_queued = true;
+inline std::string WaitingVerdict() {
+  if (submitted_to_queued) return "queued";
+  return "waiting";
+}
+
 // judge requests
 std::mutex judge_mtx;
+std::atomic_int receiving_submission_id;
 
 bool DealOneSubmission(nlohmann::json&& data);
 
@@ -147,9 +163,10 @@ void OneSubmissionThread(nlohmann::json&& data) {
     std::lock_guard lck(judge_mtx);
     // optionally reject submission here
     if (CurrentSubmissionQueueSize() >= kMaxQueue) {
-      SendStatus(submission_id, "queued");
+      SendStatus(submission_id, WaitingVerdict());
       return;
     }
+    receiving_submission_id = submission_id;
     if (CurrentSubmissionQueueSize() + 1 < kMaxQueue) {
       TryFetchSubmission();
     }
@@ -160,7 +177,9 @@ void OneSubmissionThread(nlohmann::json&& data) {
         return false;
       }
     };
-    if (!try_deal_submission()) {
+    bool result = try_deal_submission();
+    receiving_submission_id = -1;
+    if (!result) {
       SendStatus(submission_id, VerdictToAbr(Verdict::JE));
       TryFetchSubmission();
     }
@@ -168,13 +187,6 @@ void OneSubmissionThread(nlohmann::json&& data) {
     spdlog::warn("Submission parsing error: {}", err.what());
     TryFetchSubmission();
   }
-}
-
-// backward compat: JCE -> ER for < 3.5.0
-bool jce_to_er = true;
-inline std::string VerdictToAbrCompat(Verdict verdict) {
-  if (jce_to_er && verdict == Verdict::JCE) return "ER";
-  return VerdictToAbr(verdict);
 }
 
 // websocket class
@@ -233,17 +245,20 @@ class TIOJClient : public WsClient {
         if (data["type"] == "welcome") {
           server_version = data.value("version", "3.4.0");
           spdlog::info("Server version: {}", server_version);
-          int major_version = 3, minor_version = 4;
+          int major_version = 3, minor_version = 4, patch_version = 0;
           try {
             size_t first_dot = server_version.find('.');
             size_t second_dot = server_version.find('.', first_dot + 1);
             major_version = std::stoi(server_version.substr(0, first_dot));
             minor_version = std::stoi(server_version.substr(first_dot + 1, second_dot - first_dot - 1));
+            patch_version = std::stoi(server_version.substr(second_dot + 1));
           } catch (...) {
             spdlog::error("Invalid server version, disconnecting");
             Close();
           }
           jce_to_er = std::make_pair(major_version, minor_version) < std::make_pair(3, 5);
+          submitted_to_queued =
+              std::make_tuple(major_version, minor_version, patch_version) < std::make_tuple(3, 5, 3);
         }
         return;
       }
@@ -633,7 +648,9 @@ bool DealOneSubmission(nlohmann::json&& data) {
   if (sub.problem_prog_stages.size()) {
     Move(tempdir.ProbProgPath(), SubmissionProblemProgCode(sub.submission_internal_id));
   }
+  int submission_id = sub.submission_id;
   PushSubmission(std::move(sub));
+  SendStatus(submission_id, "queued");
   return true;
 }
 
@@ -723,8 +740,15 @@ void SendStatus(int submission_id, const std::string& status) {
   PushRequest(std::move(req));
 }
 
+std::vector<int> GetReceivedSubmissionID() {
+  std::vector<int> ret = GetQueuedSubmissionID();
+  int receiving_submission_id_val = receiving_submission_id.load();
+  if (receiving_submission_id_val != -1) ret.push_back(receiving_submission_id_val);
+  return ret;
+}
+
 void SendQueuedSubmissions(bool send_if_empty) {
-  std::vector<int> ids = GetQueuedSubmissionID();
+  std::vector<int> ids = GetReceivedSubmissionID();
   if (ids.empty() && !send_if_empty) return;
   nlohmann::json data{{"submission_ids", ids}};
   Request req{};
