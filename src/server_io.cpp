@@ -145,9 +145,9 @@ inline std::string VerdictToAbrCompat(Verdict verdict) {
 }
 
 // backward compat: waiting -> queued for < 3.5.3
-bool submitted_to_queued = true;
+bool waiting_to_queued = true;
 inline std::string WaitingVerdict() {
-  if (submitted_to_queued) return "queued";
+  if (waiting_to_queued) return "queued";
   return "waiting";
 }
 
@@ -257,7 +257,7 @@ class TIOJClient : public WsClient {
             Close();
           }
           jce_to_er = std::make_pair(major_version, minor_version) < std::make_pair(3, 5);
-          submitted_to_queued =
+          waiting_to_queued =
               std::make_tuple(major_version, minor_version, patch_version) < std::make_tuple(3, 5, 3);
         }
         return;
@@ -650,7 +650,7 @@ bool DealOneSubmission(nlohmann::json&& data) {
   }
   int submission_id = sub.submission_id;
   PushSubmission(std::move(sub));
-  SendStatus(submission_id, "queued");
+  if (!waiting_to_queued) SendStatus(submission_id, "queued");
   return true;
 }
 
