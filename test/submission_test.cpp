@@ -60,6 +60,12 @@ static_assert(__cplusplus == 202002L, "C++20 required");
 int main(){ int a; scanf("%d",&a);printf("%d",a); })"},
         (SubParam){6, 4, true, Compiler::GCC_CPP_20, R"(#include <cstdio>
 static_assert(__cplusplus == 202002L, "C++20 required");
+int main(){ int a; scanf("%d",&a);printf("%d",a); })"},
+        (SubParam){7, 1, false, Compiler::GCC_CPP_23, R"(#include <cstdio>
+static_assert(__cplusplus > 202002L, "C++23 required");
+int main(){ int a; scanf("%d",&a);printf("%d",a); })"},
+        (SubParam){7, 4, true, Compiler::GCC_CPP_23, R"(#include <cstdio>
+static_assert(__cplusplus > 202002L, "C++23 required");
 int main(){ int a; scanf("%d",&a);printf("%d",a); })"}),
     ParamName);
 

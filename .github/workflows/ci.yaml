@@ -9,7 +9,7 @@ on:
 jobs:
   tests:
     name: tioj-judge CI Tests
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-26.04
 
     steps:
       - name: Checkout code
@@ -17,14 +17,26 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get update && sudo apt-get -yqq install git g++ cmake ninja-build \
-            libseccomp-dev libnl-genl-3-dev libsqlite3-dev libz-dev libssl-dev \
+          sudo apt-get update
+          sudo apt-get -yqq install git g++ cmake make ninja-build curl \
+            libseccomp-dev libnl-genl-3-dev libsqlite3-dev libz-dev libssl-dev libjitterentropy3-dev \
             libboost-all-dev libzstd-dev \
-            ghc python2 python3 python3-numpy python3-pil rustc
+            ghc python3 python3-numpy python3-pil rustc
+
+      - name: Build Python 2 compatibility runtime
+        run: |
+          curl -fsSLO https://www.python.org/ftp/python/2.7.18/Python-2.7.18.tgz
+          echo 'da3080e3b488f648a3d7a4560ddee895284c3380b11d6de75edb986526b9a814  Python-2.7.18.tgz' | sha256sum -c -
+          tar -xzf Python-2.7.18.tgz
+          cd Python-2.7.18
+          CC='gcc -std=gnu17' CXX='g++ -std=gnu++17' ./configure --prefix=/opt/python2 --without-ensurepip --disable-shared
+          make -j2
+          sudo make install
+          sudo ln -s /opt/python2/bin/python2.7 /usr/local/bin/python2
 
       - name: Compile
         run: |
-          cmake -Bbuild -GNinja .
+          cmake -Bbuild -GNinja -DCMAKE_POLICY_VERSION_MINIMUM=3.5 .
           cmake --build build
 
       - name: Run tests
