@@ -22,20 +22,26 @@
 
 ### Prerequisites
 
-On Ubuntu 22.04, you can use the following command to install the dependencies.
+On Ubuntu 26.04, you can use the following command to install the dependencies.
 
 ```bash
 apt update
 apt install -y git g++ cmake ninja-build \
-  libseccomp-dev libnl-genl-3-dev libsqlite3-dev libz-dev libssl-dev \
+  libseccomp-dev libnl-genl-3-dev libsqlite3-dev libz-dev libssl-dev libjitterentropy3-dev \
   libboost-all-dev libzstd-dev \
-  ghc python2 python3 python3-numpy python3-pil rustc
+  ghc python3 python3-numpy python3-pil rustc
 ```
+
+`libjitterentropy3-dev` supplies `libjitterentropy.a`, a dependency of Ubuntu 26.04's static OpenSSL `libcrypto.a`. The judge links OpenSSL statically, so omitting it causes undefined `jent_*` symbols at link time. Ubuntu 22.04 and 24.04 do not provide or need this package for their OpenSSL builds; omit it on those releases.
+
+Ubuntu 24.04 and 26.04 no longer package Python 2. The Docker image builds Python 2.7.18 from source under `/usr/local` to retain support for Python 2 submissions; native installations need to provide `python2` separately. Ubuntu 22.04 still provides the `python2` package. Keep both the interpreter and its standard library under `/usr` (including `/usr/local`), which is mounted inside the compile and execution sandboxes. A symlink to an interpreter under `/opt` will not work inside the sandbox.
 
 ### Installation
 
+Ubuntu 26.04 ships CMake 4, which no longer supports policy versions below 3.5. The pinned `cjail` and `tortellini` dependencies still declare policy versions 3.0.2 and 3.2, respectively, so configuration fails without `-DCMAKE_POLICY_VERSION_MINIMUM=3.5`. This flag applies at least CMake 3.5 policy behavior to those dependencies; it does not select or install CMake 3.5. It can be removed once both dependencies declare a supported policy version. See the [CMake documentation](https://cmake.org/cmake/help/latest/variable/CMAKE_POLICY_VERSION_MINIMUM.html).
+
 ```
-cmake -B build -G Ninja
+cmake -B build -G Ninja -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 cmake --build build
 sudo cmake --install build
 ```
@@ -71,7 +77,15 @@ testdata_root = /var/lib/tioj-judge
 
 A Dockerfile is provided to run the judge easily.
 
-When running the docker, `--privileged --net=host --pid=host` must be given, and the fetch key should be given via environment variable `TIOJ_KEY`.
+When running the docker, `--privileged --net=host --pid=host --cgroupns=host` must be given, and the fetch key should be given via environment variable `TIOJ_KEY`. The host cgroup namespace lets cjail create resource-limited child cgroups on cgroups v2 hosts.
+
+To build the image and run the judge tests:
+
+```bash
+docker build -t tioj-judge:test .
+docker run --rm --privileged --net=host --pid=host --cgroupns=host \
+  --tmpfs /tmp:exec tioj-judge:test /judge/build/judge-test
+```
 
 ## Library
 

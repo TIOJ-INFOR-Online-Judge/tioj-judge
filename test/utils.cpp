@@ -1,6 +1,7 @@
 #include "utils.h"
 
 #include <tioj/paths.h>
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 
@@ -14,6 +15,16 @@ long SetupSubmission(Submission& sub, int id, Compiler lang, long time, bool san
   sub.submission_time = time;
   sub.lang = lang;
   sub.sandbox_strict = sandbox_strict;
+  if (lang == Compiler::HASKELL) {
+    // Match the limits applied to Haskell submissions by server_io.cpp.
+    sub.process_limit = std::max(sub.process_limit, HASKELL_PROCESS_LIMIT);
+    for (auto& lim : sub.testdata) {
+      if (lim.vss > 0) {
+        lim.rss = lim.rss == 0 ? lim.vss : std::min(lim.vss, lim.rss);
+        lim.vss = 0;
+      }
+    }
+  }
   fs::create_directories(SubmissionCodePath(iid));
   {
     std::ofstream fout(SubmissionUserCode(iid));
