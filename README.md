@@ -36,6 +36,8 @@ Ubuntu 26.04 no longer packages Python 2. The Docker image builds Python 2.7.18 
 
 ### Installation
 
+Ubuntu 26.04 ships CMake 4, which no longer supports policy versions below 3.5. The pinned `cjail` and `tortellini` dependencies still declare policy versions 3.0.2 and 3.2, respectively, so configuration fails without `-DCMAKE_POLICY_VERSION_MINIMUM=3.5`. This flag applies at least CMake 3.5 policy behavior to those dependencies; it does not select or install CMake 3.5. It can be removed once both dependencies declare a supported policy version. See the [CMake documentation](https://cmake.org/cmake/help/latest/variable/CMAKE_POLICY_VERSION_MINIMUM.html).
+
 ```
 cmake -B build -G Ninja -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 cmake --build build
