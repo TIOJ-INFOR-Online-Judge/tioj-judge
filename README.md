@@ -32,7 +32,9 @@ apt install -y git g++ cmake ninja-build \
   ghc python3 python3-numpy python3-pil rustc
 ```
 
-Ubuntu 26.04 no longer packages Python 2. The Docker image builds Python 2.7.18 from source under `/usr/local` to retain support for Python 2 submissions; native installations need to provide `python2` separately. Keep both the interpreter and its standard library under `/usr` (including `/usr/local`), which is mounted inside the compile and execution sandboxes. A symlink to an interpreter under `/opt` will not work inside the sandbox.
+`libjitterentropy3-dev` supplies `libjitterentropy.a`, a dependency of Ubuntu 26.04's static OpenSSL `libcrypto.a`. The judge links OpenSSL statically, so omitting it causes undefined `jent_*` symbols at link time. Ubuntu 22.04 and 24.04 do not provide or need this package for their OpenSSL builds; omit it on those releases.
+
+Ubuntu 24.04 and 26.04 no longer package Python 2. The Docker image builds Python 2.7.18 from source under `/usr/local` to retain support for Python 2 submissions; native installations need to provide `python2` separately. Ubuntu 22.04 still provides the `python2` package. Keep both the interpreter and its standard library under `/usr` (including `/usr/local`), which is mounted inside the compile and execution sandboxes. A symlink to an interpreter under `/opt` will not work inside the sandbox.
 
 ### Installation
 
