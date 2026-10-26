@@ -32,7 +32,7 @@ apt install -y git g++ cmake ninja-build \
   ghc python3 python3-numpy python3-pil rustc
 ```
 
-Ubuntu 26.04 no longer packages Python 2. The Docker image builds Python 2.7.18 from source to retain support for Python 2 submissions; native installations need to provide `python2` separately.
+Ubuntu 26.04 no longer packages Python 2. The Docker image builds Python 2.7.18 from source under `/usr/local` to retain support for Python 2 submissions; native installations need to provide `python2` separately. Keep both the interpreter and its standard library under `/usr` (including `/usr/local`), which is mounted inside the compile and execution sandboxes. A symlink to an interpreter under `/opt` will not work inside the sandbox.
 
 ### Installation
 
