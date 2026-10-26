@@ -60,7 +60,15 @@ static_assert(__cplusplus == 202002L, "C++20 required");
 int main(){ int a; scanf("%d",&a);printf("%d",a); })"},
         (SubParam){6, 4, true, Compiler::GCC_CPP_20, R"(#include <cstdio>
 static_assert(__cplusplus == 202002L, "C++20 required");
-int main(){ int a; scanf("%d",&a);printf("%d",a); })"}),
+int main(){ int a; scanf("%d",&a);printf("%d",a); })"},
+        (SubParam){7, 1, false, Compiler::GCC_CPP_23, R"(#include <cstdio>
+#include <expected>
+static_assert(__cplusplus > 202002L, "C++23 required");
+int main(){ int a; scanf("%d",&a); std::expected<int, int> value(a); printf("%d", value.value()); })"},
+        (SubParam){7, 4, true, Compiler::GCC_CPP_23, R"(#include <cstdio>
+#include <expected>
+static_assert(__cplusplus > 202002L, "C++23 required");
+int main(){ int a; scanf("%d",&a); std::expected<int, int> value(a); printf("%d", value.value()); })"}),
     ParamName);
 
 // TODO: multiple submission rejudge
