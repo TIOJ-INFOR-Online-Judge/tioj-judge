@@ -37,7 +37,7 @@ Ubuntu 26.04 no longer packages Python 2. The Docker image builds Python 2.7.18 
 ### Installation
 
 ```
-cmake -B build -G Ninja
+cmake -B build -G Ninja -DCMAKE_POLICY_VERSION_MINIMUM=3.5
 cmake --build build
 sudo cmake --install build
 ```
