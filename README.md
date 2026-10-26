@@ -73,7 +73,15 @@ testdata_root = /var/lib/tioj-judge
 
 A Dockerfile is provided to run the judge easily.
 
-When running the docker, `--privileged --net=host --pid=host` must be given, and the fetch key should be given via environment variable `TIOJ_KEY`.
+When running the docker, `--privileged --net=host --pid=host --cgroupns=host` must be given, and the fetch key should be given via environment variable `TIOJ_KEY`. The host cgroup namespace lets cjail create resource-limited child cgroups on cgroups v2 hosts.
+
+To build the image and run the judge tests:
+
+```bash
+docker build -t tioj-judge:test .
+docker run --rm --privileged --net=host --pid=host --cgroupns=host \
+  --tmpfs /tmp:exec tioj-judge:test /judge/build/judge-test
+```
 
 ## Library
 
