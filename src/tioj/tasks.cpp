@@ -241,6 +241,7 @@ struct cjail_result RunExecute(const SubmissionAndResult& sub_and_result, const 
   // file limit is not needed since we have already limited the total size by mounting tmpfs
   opt.fsize = lim.output;
   if (opt.fsize <= 0 || opt.fsize > kMaxOutput) opt.fsize = kMaxOutput;
+  if (lang == Compiler::PYTHON3) opt.envs.push_back("OMP_NUM_THREADS=1");
   if (sub.sandbox_strict) {
     if (lang == Compiler::PYTHON2 || lang == Compiler::PYTHON3) {
       // TODO: is it possible to run without /usr/bin and /bin? (maybe copy python executable to workdir)

@@ -74,6 +74,18 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/libs/websocketpp)
 
 find_library(JITTERENTROPY_LIB NAMES jitterentropy)
 
+# Explicit Brotli linking is needed on Arch Linux
+set(CMAKE_FIND_LIBRARY_SUFFIXES ".a" ".so")
+find_library(BROTLI_ENC_LIBRARY NAMES brotlienc)
+find_library(BROTLI_DEC_LIBRARY NAMES brotlidec)
+if(BROTLI_ENC_LIBRARY)
+  list(APPEND OPENSSL_LIBRARIES ${BROTLI_ENC_LIBRARY})
+endif()
+if(BROTLI_DEC_LIBRARY)
+  list(APPEND OPENSSL_LIBRARIES ${BROTLI_DEC_LIBRARY})
+endif()
+set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
+
 # detect Haskell version
 find_program(HASKELL_EXECUTABLE ghc)
 if(HASKELL_EXECUTABLE)
