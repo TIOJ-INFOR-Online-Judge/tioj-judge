@@ -3,6 +3,7 @@
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-local-typedefs"
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
 #include <sqlite_orm/sqlite_orm.h>
 #pragma GCC diagnostic pop
 #include "paths.h"

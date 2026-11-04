@@ -27,5 +27,10 @@ int main(int argc, char** argv) {
     spdlog::error("Tests must be run as root.");
     return 1;
   }
+  if (char* mounts = getenv("TIOJ_JUDGE_MOUNTS")) {
+    kSandboxMounts = SplitSandboxPath(mounts);
+  } else if (char* path = getenv("PATH")) {
+    kSandboxMounts = SplitSandboxPath(path);
+  }
   return RUN_ALL_TESTS();
 }

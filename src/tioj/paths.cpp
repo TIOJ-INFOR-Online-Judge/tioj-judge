@@ -2,6 +2,18 @@
 
 fs::path kBoxRoot = "/tmp/tioj_box";
 fs::path kSubmissionRoot = "/tmp/tioj_submissions";
+std::vector<fs::path> kSandboxMounts;
+
+std::vector<fs::path> SplitSandboxPath(const std::string& sandbox_path) {
+  std::vector<fs::path> paths;
+  for (size_t i = 0, j = 0; i <= sandbox_path.size(); ++i) {
+    if (i == sandbox_path.size() || sandbox_path[i] == ':') {
+      if (j < i) paths.push_back(sandbox_path.substr(j, i - j));
+      j = i + 1;
+    }
+  }
+  return paths;
+}
 
 namespace internal {
 fs::path kDataDir = fs::path(TIOJ_DATA_DIR);

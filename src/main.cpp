@@ -37,6 +37,17 @@ void ParseConfig(const fs::path& conf_path) {
   if (box_root.size()) kBoxRoot = box_root;
   if (submission_root.size()) kSubmissionRoot = submission_root;
   if (testdata_root.size()) kTestdataRoot = testdata_root;
+
+  std::string sandbox_mounts = ini[""]["sandbox_mounts"] | "";
+  if (sandbox_mounts.empty()) {
+    if (char* mounts = getenv("TIOJ_JUDGE_MOUNTS")) {
+      sandbox_mounts = mounts;
+    } else if (char* path = getenv("PATH")) {
+      sandbox_mounts = path;
+    }
+  }
+  kSandboxMounts = SplitSandboxPath(sandbox_mounts);
+
   kMaxParallel = ini[""]["parallel"] | kMaxParallel;
   SetPinnedCPU(ini[""]["pinned_cpus"] | "none");
   kMaxRSS = (ini[""]["max_rss_per_task_mb"] | (kMaxRSS / 1024)) * 1024;

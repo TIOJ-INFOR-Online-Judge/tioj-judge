@@ -4,11 +4,15 @@
 #include <filesystem>
 #include <mutex>
 #include <unordered_map>
+#include <vector>
 
 namespace fs = std::filesystem;
 
 extern fs::path kBoxRoot;
 extern fs::path kSubmissionRoot;
+extern std::vector<fs::path> kSandboxMounts;
+
+std::vector<fs::path> SplitSandboxPath(const std::string& sandbox_path);
 
 namespace internal {
 

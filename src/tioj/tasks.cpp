@@ -12,6 +12,7 @@
 #include <spdlog/spdlog.h>
 #include "paths.h"
 #include "sandbox_exec.h"
+#include "tioj/paths.h"
 #include "utils.h"
 
 namespace {
@@ -139,6 +140,8 @@ struct cjail_result RunCompile(const SubmissionAndResult& sub_and_result, const 
         opt.command.insert(opt.command.end(), {"-C", "target-feature=+crt-static"});
       }
       opt.envs.push_back("TMPDIR=.");
+      if (char* path = getenv("CARGO_HOME")) opt.envs.push_back(std::string("CARGO_HOME=") + path);
+      if (char* path = getenv("RUSTUP_HOME")) opt.envs.push_back(std::string("RUSTUP_HOME=") + path);
       break;
     }
     case Compiler::HASKELL: {
@@ -186,9 +189,7 @@ struct cjail_result RunCompile(const SubmissionAndResult& sub_and_result, const 
   opt.proc_num = 32;
   opt.fsize = kMaxOutput;
   opt.dirs = {"/usr", "/lib", "/lib64", "/etc/alternatives", "/bin"};
-  if (lang == Compiler::HASKELL) {
-    opt.dirs.push_back("/var/lib/ghc");
-  }
+  for (const auto& path : kSandboxMounts) opt.dirs.push_back(path);
   opt.FilterDirs();
   return SandboxExec(opt);
 }
@@ -244,7 +245,7 @@ struct cjail_result RunExecute(const SubmissionAndResult& sub_and_result, const 
     if (lang == Compiler::PYTHON2 || lang == Compiler::PYTHON3) {
       // TODO: is it possible to run without /usr/bin and /bin? (maybe copy python executable to workdir)
       opt.dirs = {"/usr", "/lib", "/lib64", "/etc/alternatives", "/bin"};
-      if (char* path = getenv("PATH")) opt.envs.push_back(std::string("PATH=") + path);
+      for (const auto& path : kSandboxMounts) opt.dirs.push_back(path);
     }
     int fd_input = open(ExecuteBoxInput(id, subtask, stage, sub.sandbox_strict).c_str(), O_RDONLY);
     int fd_output =
@@ -263,6 +264,7 @@ struct cjail_result RunExecute(const SubmissionAndResult& sub_and_result, const 
     opt.error = "/dev/null";
   } else {
     opt.dirs = {"/usr", "/lib", "/lib64", "/etc/alternatives", "/bin"};
+    for (const auto& path : kSandboxMounts) opt.dirs.push_back(path);
     if (char* path = getenv("PATH")) opt.envs.push_back(std::string("PATH=") + path);
     opt.input = ExecuteBoxInput(-1, -1, -1, sub.sandbox_strict, true);
     opt.output = ExecuteBoxOutput(-1, -1, -1, sub.sandbox_strict, true);
@@ -353,6 +355,7 @@ struct cjail_result RunScoring(const SubmissionAndResult& sub_and_result, const 
   opt.proc_num = 10;
   opt.fsize = kMaxOutput;
   opt.dirs = {"/usr", "/var/lib", "/lib", "/lib64", "/etc/alternatives", "/bin"};
+  for (const auto& path : kSandboxMounts) opt.dirs.push_back(path);
   opt.envs.push_back("TMPDIR=" + ScoringBoxTempdir(-1, -1, -1, true).string());
   opt.FilterDirs();
   return SandboxExec(opt);
@@ -381,6 +384,7 @@ struct cjail_result RunSummary(const SubmissionAndResult& sub_and_result, const 
   opt.proc_num = 10;
   opt.fsize = kMaxOutput;
   opt.dirs = {"/usr", "/var/lib", "/lib", "/lib64", "/etc/alternatives", "/bin"};
+  for (const auto& path : kSandboxMounts) opt.dirs.push_back(path);
   opt.FilterDirs();
   return SandboxExec(opt);
 }

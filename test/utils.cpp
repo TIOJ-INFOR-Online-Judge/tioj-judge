@@ -19,6 +19,7 @@ long SetupSubmission(Submission& sub, int id, Compiler lang, long time, bool san
     std::ofstream fout(SubmissionUserCode(iid));
     fout << code;
   }
+  if (sub.lang == Compiler::HASKELL) sub.process_limit = HASKELL_PROCESS_LIMIT;
   if (spec_type != SpecjudgeType::NORMAL) {
     sub.specjudge_type = spec_type;
     sub.specjudge_lang = Compiler::GCC_CPP_17;
