@@ -3,8 +3,9 @@ FROM ubuntu:26.04
 RUN apt update -y && apt upgrade -y
 RUN apt install -y \
     software-properties-common git g++ cmake ninja-build curl \
-    libseccomp-dev libnl-genl-3-dev libsqlite3-dev libbsd-dev libjitterentropy3-dev \
-    libz-dev libbz2-dev libssl-dev libboost-all-dev libzstd-dev
+    libseccomp-dev libnl-genl-3-dev libsqlite3-dev libbsd-dev libgmp-dev \
+    libz-dev libbz2-dev libreadline-dev libssl-dev libboost-all-dev libzstd-dev \
+    libjitterentropy3-dev
 RUN add-apt-repository -y ppa:jdxcode/mise && \
     apt install -y mise
 RUN mise plugin add ghc
@@ -17,7 +18,7 @@ ENV TIOJ_JUDGE_MOUNTS="/root/.local/share/mise:/root/.cargo:/root/.rustup"
 ENV CARGO_HOME="/root/.cargo"
 ENV RUSTUP_HOME="/root/.rustup"
 
-RUN pip3 install numpy~=2.5 Pillow~=13.0
+RUN pip3 install numpy~=2.5.0 Pillow~=13.0.0
 
 WORKDIR /judge
 
