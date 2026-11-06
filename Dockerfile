@@ -24,7 +24,6 @@ WORKDIR /judge
 
 COPY . ./
 
-RUN apt install -y libbsd-dev
 RUN cmake -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -B build -G Ninja
 RUN cmake --build build
 RUN cmake --install build
