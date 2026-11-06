@@ -30,10 +30,12 @@ std::vector<std::string> GccCompileCommand(Compiler lang, const std::string& inp
     case Compiler::GCC_CPP_14: prog = "g++", std = "-std=c++14"; break;
     case Compiler::GCC_CPP_17: prog = "g++", std = "-std=c++17"; break;
     case Compiler::GCC_CPP_20: prog = "g++", std = "-std=c++20"; break;
+    case Compiler::GCC_CPP_23: prog = "g++", std = "-std=c++23"; break;
     case Compiler::GCC_C_90: prog = "gcc", std = "-ansi"; break;
     case Compiler::GCC_C_99: prog = "gcc", std = "-std=c99"; break;
     case Compiler::GCC_C_11: prog = "gcc", std = "-std=c11"; break;
     case Compiler::GCC_C_17: prog = "gcc", std = "-std=c17"; break;
+    case Compiler::GCC_C_23: prog = "gcc", std = "-std=c23"; break;
     default: __builtin_unreachable();
   }
   std::vector<std::string> ret = {"/usr/bin/env", prog, std, "-O2", "-w"};
@@ -51,10 +53,12 @@ std::vector<std::string> ExecuteCommand(Compiler lang, const std::string& progra
     case Compiler::GCC_CPP_14: [[fallthrough]];
     case Compiler::GCC_CPP_17: [[fallthrough]];
     case Compiler::GCC_CPP_20: [[fallthrough]];
+    case Compiler::GCC_CPP_23: [[fallthrough]];
     case Compiler::GCC_C_90: [[fallthrough]];
     case Compiler::GCC_C_99: [[fallthrough]];
     case Compiler::GCC_C_11: [[fallthrough]];
     case Compiler::GCC_C_17: [[fallthrough]];
+    case Compiler::GCC_C_23: [[fallthrough]];
     case Compiler::RUSTC_RUST_2021: [[fallthrough]];
     case Compiler::HASKELL: return {program};
     case Compiler::PYTHON2: return {"/usr/bin/env", "python2", program};
@@ -89,6 +93,13 @@ std::vector<std::string> ParseAdditionalArgs(CompileSubtask task, const Submissi
     case CompileSubtask::PROBPROG: return ParseCommandLine(sub.problem_prog_compile_args, input, output);
   }
   __builtin_unreachable();
+}
+
+void AddSandboxMounts(SandboxOptions& opt) {
+  for (const auto& path : kSandboxMounts) opt.dirs.push_back(path);
+}
+void AddPath(SandboxOptions& opt) {
+  if (char* path = getenv("PATH")) opt.envs.push_back(std::string("PATH=") + path);
 }
 
 /// child
@@ -128,10 +139,12 @@ struct cjail_result RunCompile(const SubmissionAndResult& sub_and_result, const 
     case Compiler::GCC_CPP_14: [[fallthrough]];
     case Compiler::GCC_CPP_17: [[fallthrough]];
     case Compiler::GCC_CPP_20: [[fallthrough]];
+    case Compiler::GCC_CPP_23: [[fallthrough]];
     case Compiler::GCC_C_90: [[fallthrough]];
     case Compiler::GCC_C_99: [[fallthrough]];
     case Compiler::GCC_C_11: [[fallthrough]];
-    case Compiler::GCC_C_17:
+    case Compiler::GCC_C_17: [[fallthrough]];
+    case Compiler::GCC_C_23:
       opt.command = GccCompileCommand(lang, input, interlib, output, sub.sandbox_strict);
       break;
     case Compiler::RUSTC_RUST_2021: {
@@ -176,7 +189,7 @@ struct cjail_result RunCompile(const SubmissionAndResult& sub_and_result, const 
   for (const auto& arg : ParseAdditionalArgs(subtask, sub, input, output)) {
     opt.command.push_back(arg);
   }
-  if (char* path = getenv("PATH")) opt.envs.push_back(std::string("PATH=") + path);
+  AddPath(opt);
   opt.workdir = Workdir("/");
   opt.input = "/dev/null";
   opt.fd_output = open(CompileBoxMessage(id, subtask).c_str(), O_WRONLY | O_APPEND | O_CREAT, 0666);
@@ -189,7 +202,7 @@ struct cjail_result RunCompile(const SubmissionAndResult& sub_and_result, const 
   opt.proc_num = 32;
   opt.fsize = kMaxOutput;
   opt.dirs = {"/usr", "/lib", "/lib64", "/etc/alternatives", "/bin"};
-  for (const auto& path : kSandboxMounts) opt.dirs.push_back(path);
+  AddSandboxMounts(opt);
   opt.FilterDirs();
   return SandboxExec(opt);
 }
@@ -246,7 +259,8 @@ struct cjail_result RunExecute(const SubmissionAndResult& sub_and_result, const 
     if (lang == Compiler::PYTHON2 || lang == Compiler::PYTHON3) {
       // TODO: is it possible to run without /usr/bin and /bin? (maybe copy python executable to workdir)
       opt.dirs = {"/usr", "/lib", "/lib64", "/etc/alternatives", "/bin"};
-      for (const auto& path : kSandboxMounts) opt.dirs.push_back(path);
+      AddSandboxMounts(opt);
+      AddPath(opt);
     }
     int fd_input = open(ExecuteBoxInput(id, subtask, stage, sub.sandbox_strict).c_str(), O_RDONLY);
     int fd_output =
@@ -265,8 +279,8 @@ struct cjail_result RunExecute(const SubmissionAndResult& sub_and_result, const 
     opt.error = "/dev/null";
   } else {
     opt.dirs = {"/usr", "/lib", "/lib64", "/etc/alternatives", "/bin"};
-    for (const auto& path : kSandboxMounts) opt.dirs.push_back(path);
-    if (char* path = getenv("PATH")) opt.envs.push_back(std::string("PATH=") + path);
+    AddSandboxMounts(opt);
+    AddPath(opt);
     opt.input = ExecuteBoxInput(-1, -1, -1, sub.sandbox_strict, true);
     opt.output = ExecuteBoxOutput(-1, -1, -1, sub.sandbox_strict, true);
     opt.error = ExecuteBoxError(-1, -1, -1, true);
@@ -356,7 +370,7 @@ struct cjail_result RunScoring(const SubmissionAndResult& sub_and_result, const 
   opt.proc_num = 10;
   opt.fsize = kMaxOutput;
   opt.dirs = {"/usr", "/var/lib", "/lib", "/lib64", "/etc/alternatives", "/bin"};
-  for (const auto& path : kSandboxMounts) opt.dirs.push_back(path);
+  AddSandboxMounts(opt);
   opt.envs.push_back("TMPDIR=" + ScoringBoxTempdir(-1, -1, -1, true).string());
   opt.FilterDirs();
   return SandboxExec(opt);
@@ -385,7 +399,7 @@ struct cjail_result RunSummary(const SubmissionAndResult& sub_and_result, const 
   opt.proc_num = 10;
   opt.fsize = kMaxOutput;
   opt.dirs = {"/usr", "/var/lib", "/lib", "/lib64", "/etc/alternatives", "/bin"};
-  for (const auto& path : kSandboxMounts) opt.dirs.push_back(path);
+  AddSandboxMounts(opt);
   opt.FilterDirs();
   return SandboxExec(opt);
 }

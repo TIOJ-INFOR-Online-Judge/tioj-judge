@@ -29,7 +29,13 @@ void ExampleProblem::SetUp(int problem_id_, const std::vector<std::pair<std::str
     std::ofstream f1(in_path), f2(out_path);
     f1 << tds[i].first;
     f2 << tds[i].second;
-    sub.testdata.push_back({in_path, out_path, 65536, 65536, 65536, 1'000'000, false});
+    sub.testdata.push_back({.input_file = in_path,
+                            .answer_file = out_path,
+                            .vss = 65536,
+                            .rss = 65536,
+                            .output = 65536,
+                            .time = 1'000'000,
+                            .ignore_verdict = false});
   }
   sub.problem_id = problem_id;
 }

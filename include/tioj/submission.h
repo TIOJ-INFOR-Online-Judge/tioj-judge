@@ -54,10 +54,12 @@ enum class SummaryType {
   X(GCC_CPP_14, "c++14") \
   X(GCC_CPP_17, "c++17") \
   X(GCC_CPP_20, "c++20") \
+  X(GCC_CPP_23, "c++23") \
   X(GCC_C_90, "c90") \
   X(GCC_C_99, "c99") \
   X(GCC_C_11, "c11") \
   X(GCC_C_17, "c17") \
+  X(GCC_C_23, "c23") \
   X(RUSTC_RUST_2021, "rust 2021") \
   X(HASKELL, "haskell") \
   X(PYTHON2, "python2") \
