@@ -373,7 +373,9 @@ bool SetupExecute(SubmissionAndResult& sub_and_result, const TaskEntry& task) {
     long tmpfs_size_kib = (fs::file_size(compiled) / 4096 + 1) * 4 +
                           (fs::file_size(sub.testdata[subtask].input_file) / 4096 + 1) * 4 +
                           std::min(sub.testdata[subtask].output * 2, kMaxOutput);
-    MountTmpfs(workdir, tmpfs_size_kib);
+    uid_t uid = geteuid();
+    gid_t gid = getegid();
+    AsRoot([&]() { return MountTmpfs(workdir, tmpfs_size_kib) && lchown(workdir.c_str(), uid, gid) >= 0; });
   }
 
   if (is_problem_prog_stage) {
@@ -431,8 +433,13 @@ void FinalizeExecute(SubmissionAndResult& sub_and_result, const TaskEntry& task,
       std::ofstream(output_dest).close();
       fs::permissions(output_dest, kPerm666);
     }
-    IGNORE_RETURN(chown(output_dest.c_str(), 0, 0));
-    if (!sub.sandbox_strict) Umount(workdir);
+    uid_t uid = geteuid();
+    gid_t gid = getegid();
+    AsRoot([&]() {
+      IGNORE_RETURN(chown(output_dest.c_str(), uid, gid));
+      if (!sub.sandbox_strict) return Umount(workdir);
+      return true;
+    });
     RemoveAll(workdir);
   }
   if (stage > 0) {

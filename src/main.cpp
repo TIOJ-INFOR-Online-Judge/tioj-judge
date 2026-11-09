@@ -1,4 +1,5 @@
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <sys/sysinfo.h>
 #include <unistd.h>
 #include <filesystem>
@@ -15,10 +16,13 @@
 #include "server_io.h"
 #include "tioj/paths.h"
 #include "tioj/submission.h"
+#include "tioj/utils.h"
 
 namespace {
 
 bool to_lock = true;
+uid_t uid = 0;
+gid_t gid = (gid_t)-1;
 
 void SetPinnedCPU(const std::string& cpu_str) {
   if (!CpusetParse(cpu_str.c_str(), &kPinnedCpus, get_nprocs())) {
@@ -56,6 +60,9 @@ void ParseConfig(const fs::path& conf_path) {
   kTimeMultiplier = ini[""]["time_multiplier"] | kTimeMultiplier;
   kTIOJUrl = ini[""]["tioj_url"] | kTIOJUrl;
   kTIOJKey = ini[""]["tioj_key"] | kTIOJKey;
+
+  uid = ini[""]["uid"] | uid;
+  gid = ini[""]["gid"] | gid;
 }
 
 void ParseArgs(int argc, char** argv) {
@@ -78,6 +85,8 @@ void ParseArgs(int argc, char** argv) {
   parser.add_argument("-m", "--time-multiplier")
       .scan<'g', double>()
       .help("Ratio of real time to indicated time");
+  parser.add_argument("-u", "--uid").scan<'d', uid_t>().help("User ID to run as");
+  parser.add_argument("-g", "--gid").scan<'d', gid_t>().help("Group ID to run as");
   parser.add_argument("--no-lock")
       .default_value(false)
       .implicit_value(true)
@@ -127,6 +136,8 @@ void ParseArgs(int argc, char** argv) {
   if (CPU_COUNT(&kPinnedCpus) && CPU_COUNT(&kPinnedCpus) < kMaxParallel) {
     spdlog::warn("Parallelism larger than the number of pinned CPUs. Some tasks may not be pinned.");
   }
+  if (auto val = parser.present<uid_t>("--uid")) uid = val.value();
+  if (auto val = parser.present<gid_t>("--gid")) gid = val.value();
 }
 
 bool LockFile() {
@@ -141,20 +152,74 @@ bool LockFile() {
   return true;
 }
 
+bool InitDir(fs::path path) {
+  try {
+    if (fs::exists(path)) {
+      struct stat st{};
+      if (stat(path.c_str(), &st) != 0) {
+        spdlog::error("Failed to stat {}: {}", path.string(), strerror(errno));
+        return false;
+      }
+      if (st.st_uid != uid || st.st_gid != gid) {
+        spdlog::debug("Changing ownership of {} to {}:{}", path.string(), uid, gid);
+        if (!AsRoot([&]() { return ChownAll(path, uid, gid); })) {
+          spdlog::error("Failed to chown {} to {}:{}", path.string(), uid, gid);
+          return false;
+        }
+        // change everything to 755 or 644
+        for (const fs::directory_entry& entry :
+             fs::recursive_directory_iterator(path, fs::directory_options::none)) {
+          fs::perms perms = fs::status(entry.path()).permissions();
+          fs::perms new_perms =
+              static_cast<fs::perms>((perms & fs::perms::owner_exec) == fs::perms::none ? 0644 : 0755);
+          if (perms != new_perms) fs::permissions(entry.path(), new_perms);
+        }
+      }
+    } else {
+      spdlog::debug("Creating directory {}", path.string());
+      fs::create_directories(path);
+    }
+  } catch (const std::exception& e) {
+    spdlog::error("Failed to initialize directory {}: {}", path.string(), e.what());
+    return false;
+  }
+  return true;
+}
+
+// initialize directories to the correct ownership
+bool InitDirs() {
+  return InitDir(kBoxRoot) && InitDir(kSubmissionRoot) && InitDir(kTestdataRoot) &&
+         InitDir(internal::kDataDir);
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
   spdlog::set_pattern("[%t] %+");
   InitLogger();
+  umask(0022);
   ParseArgs(argc, argv);
   if (geteuid() != 0) {
     spdlog::error("Must be run as root.");
+    return 1;
+  }
+  if (uid == 0) {
+    spdlog::error("A non-root user ID must be specified.");
+    return 1;
+  }
+  if (gid == (gid_t)-1) {
+    spdlog::error("A group ID must be specified.");
     return 1;
   }
   if (to_lock && !LockFile()) {
     spdlog::error("Another judge instance is running.");
     return 1;
   }
+  if (setresgid(gid, gid, gid) != 0 || setresuid(uid, uid, 0) != 0) {
+    spdlog::error("Failed to setresuid/setresgid: {}", strerror(errno));
+    return 1;
+  }
+  if (!InitDirs()) return 1;
   std::thread server_thread(ServerWorkLoop);
   server_thread.detach();
   WorkLoop();

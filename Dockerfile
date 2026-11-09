@@ -19,6 +19,7 @@ ENV CARGO_HOME="/root/.cargo"
 ENV RUSTUP_HOME="/root/.rustup"
 
 RUN pip3 install numpy~=2.5.0 Pillow~=13.0.0
+RUN chmod 711 /root
 
 WORKDIR /judge
 

@@ -2,6 +2,7 @@
 
 #include <fcntl.h>
 #include <sys/mount.h>
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include <atomic>
@@ -179,6 +180,44 @@ bool RemoveAll(const fs::path& path, bool ignore_error) {
 err:
   if (!ignore_error) spdlog::warn("Failed deleting {}: {}", path.c_str(), strerror(ec.value()));
   return false;
+}
+
+namespace {
+
+bool ChownTree(const fs::path& path, uid_t uid, gid_t gid, std::error_code& ec) {
+  ec.clear();
+  try {
+    fs::file_status st = fs::symlink_status(path);
+    if (lchown(path.c_str(), uid, gid) != 0) {
+      ec = std::error_code(errno, std::generic_category());
+      return false;
+    }
+    if (!fs::is_directory(st)) return true;
+
+    for (const fs::directory_entry& entry :
+         fs::recursive_directory_iterator(path, fs::directory_options::none)) {
+      if (lchown(entry.path().c_str(), uid, gid) != 0) {
+        ec = std::error_code(errno, std::generic_category());
+        return false;
+      }
+    }
+    return true;
+  } catch (std::filesystem::filesystem_error& e) {
+    ec = e.code();
+    return false;
+  }
+}
+
+} // namespace
+
+bool ChownAll(const fs::path& path, uid_t uid, gid_t gid) {
+  spdlog::debug("Chown {} to {}:{}", path.c_str(), uid, gid);
+  std::error_code ec;
+  if (!ChownTree(path, uid, gid, ec)) {
+    spdlog::warn("Failed chowning {} to {}:{}: {}", path.c_str(), uid, gid, strerror(errno));
+    return false;
+  }
+  return true;
 }
 
 bool Move(const fs::path& from, const fs::path& to, fs::perms perms) {

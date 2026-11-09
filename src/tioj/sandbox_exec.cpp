@@ -9,6 +9,7 @@
 #include <tioj/paths.h>
 
 #include "sandbox_io.h"
+#include "utils.h"
 
 struct cjail_result SandboxExec(const SandboxOptions& opt) {
   struct cjail_result ret = {};
@@ -18,6 +19,7 @@ struct cjail_result SandboxExec(const SandboxOptions& opt) {
   pid = fork();
   if (pid < 0) goto err;
   if (pid == 0) {
+    if (setresuid(0, 0, 0) < 0 || setresgid(0, 0, 0) < 0) _exit(1);
     dup2(inpipe[1], 1);
     dup2(outpipe[0], 0);
     close(inpipe[0]);
@@ -45,6 +47,13 @@ struct cjail_result SandboxExec(const SandboxOptions& opt) {
   waitpid(pid, nullptr, 0);
   if (ret.timekill == -1) {
     spdlog::warn("cjail_exec error: errno={} {}", ret.oomkill, strerror(ret.oomkill));
+  }
+  {
+    uid_t uid = geteuid();
+    gid_t gid = getegid();
+    if (!AsRoot([&]() { return ChownAll(opt.boxdir, uid, gid); })) {
+      spdlog::warn("Failed to chown boxdir {}", opt.boxdir);
+    }
   }
   return ret;
 err:
