@@ -158,7 +158,8 @@ struct cjail_result RunCompile(const SubmissionAndResult& sub_and_result, const 
       break;
     }
     case Compiler::HASKELL: {
-      opt.command = {"/usr/bin/env", "ghc", "-w", "-O", "-tmpdir", ".", "-o", output, input};
+      opt.command = {"/usr/bin/env",      "ghc", "-w",   "-O", "-tmpdir", ".",
+                     "-with-rtsopts=-V0", "-o",  output, input};
       if (sub.sandbox_strict) {
         opt.command.insert(opt.command.end(),
                            {"-static", "-optl-pthread", "-optl-static", "-optl-fuse-ld=bfd"});

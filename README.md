@@ -18,18 +18,51 @@
 - Support some basic judging modes (such as floating-point compare, strict compare and white-diff compare) without the need of user-provided special judge program
 - An option to skip testdata once any of the testdata in the group got non-AC
 
-## Judge Server
+## Judge Client
 
 ### Prerequisites
 
-On Ubuntu 22.04, you can use the following command to install the dependencies.
+On Ubuntu 22.04 / 24.04 / 26.04, you can use the following commands to install the dependencies.
 
 ```bash
-apt update
-apt install -y git g++ cmake ninja-build \
-  libseccomp-dev libnl-genl-3-dev libsqlite3-dev libz-dev libssl-dev \
-  libboost-all-dev libzstd-dev \
-  ghc python2 python3 python3-numpy python3-pil rustc
+sudo apt install \
+  software-properties-common git cmake ninja-build curl \
+  libseccomp-dev libnl-genl-3-dev libsqlite3-dev libbsd-dev libgmp-dev \
+  libz-dev libbz2-dev libreadline-dev libssl-dev libboost-all-dev libzstd-dev
+
+# For Ubuntu 26.04:
+sudo apt install g++ libjitterentropy3-dev
+
+# For Ubuntu 22.04 & 24.04:
+sudo apt-add-repository ppa:ubuntu-toolchain-r/test
+sudo apt install g++-15
+sudo rm -f /etc/alternatives/cpp
+sudo update-alternatives --install /usr/bin/cpp cpp /usr/bin/cpp-15 60 \
+  --slave /usr/bin/c++ c++ /usr/bin/g++-15
+sudo update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-15 60 \
+  --slave /usr/bin/g++ g++ /usr/bin/g++-15 \
+  --slave /usr/bin/gcc-nm gcc-nm /usr/bin/gcc-nm-15 \
+  --slave /usr/bin/gcc-ar gcc-ar /usr/bin/gcc-ar-15 \
+  --slave /usr/bin/gcc-ranlib gcc-ranlib /usr/bin/gcc-ranlib-15
+```
+
+Additionally, `tioj-judge` requires GHC, Rust, Python 2, Python 3 to be available in `PATH` for judging submissions in these languages. You can use [mise](https://mise.jdx.dev/installing-mise.html#apt) to manage these dependencies:
+
+```bash
+# After installing mise
+mise plugin add ghc
+mise install python@2.7 python@3.14 rust@1.93 ghc@9.10
+# ghc install could sometimes fail; if that happens, simply rerun the above command again
+mise exec python@3.14 -- pip3 install numpy~=2.5.0 Pillow~=13.0.0
+```
+
+If you use `mise`, you need to set the following environment variables when running the judge client:
+
+```bash
+PATH="$HOME/.local/share/mise/installs/rust/1.93:$HOME/.local/share/mise/installs/python/3.14/bin:$HOME/.local/share/mise/installs/python/2.7/bin:$HOME/.local/share/mise/installs/ghc/9.10/bin:${PATH}"
+TIOJ_JUDGE_MOUNTS="$HOME/.local/share/mise:/root/.cargo:/root/.rustup"
+CARGO_HOME="$HOME/.cargo"
+RUSTUP_HOME="$HOME/.rustup"
 ```
 
 ### Installation
@@ -100,7 +133,12 @@ const std::filesystem::path kPathToOutput = "/tmp/example_output";
 } // namespace
 
 int main() {
-  // run as root
+  // run as root and set the effective UID/GID to a non-root user
+  int uid = 1000, gid = 1000;
+  setresgid(gid, gid, gid);
+  setresuid(uid, uid, 0);
+
+  // setup a submission
   constexpr int submission_id = 1, problem_id = 1, num_td = 3;
   Submission sub;
   sub.submission_internal_id = GetUniqueSubmissionInternalId();

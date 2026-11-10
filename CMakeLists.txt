@@ -86,23 +86,6 @@ if(BROTLI_DEC_LIBRARY)
 endif()
 set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
 
-# detect Haskell version
-find_program(HASKELL_EXECUTABLE ghc)
-if(HASKELL_EXECUTABLE)
-  execute_process(
-    COMMAND ${HASKELL_EXECUTABLE} --numeric-version
-    OUTPUT_VARIABLE HASKELL_VERSION
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-  )
-  if(HASKELL_VERSION VERSION_LESS "9.3")
-    set(HASKELL_PROCESS_LIMIT 1)
-  else()
-    set(HASKELL_PROCESS_LIMIT 2)
-  endif()
-else()
-  set(HASKELL_PROCESS_LIMIT 2)
-endif()
-
 # default scoring
 add_executable(default-scoring "tools/default-scoring.cpp")
 target_link_libraries(default-scoring nlohmann_json::nlohmann_json)
@@ -135,7 +118,6 @@ add_subdirectory(src)
 # judge
 file(GLOB JUDGE_SRC "src/*.cpp" "src/*.h")
 add_executable(tioj-judge ${JUDGE_SRC})
-target_compile_definitions(tioj-judge PRIVATE HASKELL_PROCESS_LIMIT=${HASKELL_PROCESS_LIMIT})
 target_link_libraries(
     tioj-judge libtioj spdlog::spdlog tortellini
     httplib::httplib ${OPENSSL_LIBRARIES} zstd
@@ -153,7 +135,6 @@ if(TIOJ_BUILD_TESTS)
 
   file(GLOB TEST_SRC "test/*.cpp" "test/*.h")
   add_executable(judge-test ${TEST_SRC})
-  target_compile_definitions(judge-test PRIVATE HASKELL_PROCESS_LIMIT=${HASKELL_PROCESS_LIMIT})
   target_link_libraries(judge-test gtest_main libtioj spdlog::spdlog)
 
   include(GoogleTest)
