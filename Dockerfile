@@ -11,9 +11,8 @@ RUN add-apt-repository -y ppa:jdxcode/mise && \
 
 RUN chmod 711 /root
 RUN mise plugin add ghc
-# ghc install sometimes fails
-RUN mise install ghc@9.10 || mise install ghc@9.10
-RUN mise install python@2.7 python@3.14 rust@1.93
+# prevent ghc download fail
+RUN MISE_FETCH_REMOTE_VERSIONS_TIMEOUT=300 mise install python@2.7 python@3.14 rust@1.93 ghc@9.10
 RUN mise exec python@3.14 -- pip3 install numpy~=2.5.0 Pillow~=13.0.0
 
 ENV PATH="/root/.local/share/mise/installs/rust/1.93:/root/.local/share/mise/installs/python/3.14/bin:/root/.local/share/mise/installs/python/2.7/bin:/root/.local/share/mise/installs/ghc/9.10/bin:${PATH}"

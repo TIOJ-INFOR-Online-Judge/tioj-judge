@@ -51,8 +51,8 @@ Additionally, `tioj-judge` requires GHC, Rust, Python 2, Python 3 to be availabl
 ```bash
 # After installing mise
 mise plugin add ghc
-mise install python@2.7 python@3.14 rust@1.93 ghc@9.10
-# ghc install could sometimes fail; if that happens, simply rerun the above command again
+# set timeout to prevent ghc download fail
+MISE_FETCH_REMOTE_VERSIONS_TIMEOUT=300 mise install python@2.7 python@3.14 rust@1.93 ghc@9.10
 mise exec python@3.14 -- pip3 install numpy~=2.5.0 Pillow~=13.0.0
 ```
 

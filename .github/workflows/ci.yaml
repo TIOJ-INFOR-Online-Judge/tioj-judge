@@ -18,6 +18,7 @@ jobs:
       - name: Install dependencies
         # runner is amd64v3 which mise PPA does not provide natively
         run: |
+          chmod 711 ~
           sudo apt update -y
           sudo apt install -y \
             software-properties-common git g++ cmake ninja-build curl \
@@ -29,8 +30,7 @@ jobs:
           sudo apt update -y
           sudo apt install -y mise
           mise plugin add ghc
-          mise install ghc@9.10 || mise install ghc@9.10
-          mise install python@2.7 python@3.14 rust@1.93
+          MISE_FETCH_REMOTE_VERSIONS_TIMEOUT=300 mise install python@2.7 python@3.14 rust@1.93 ghc@9.10
 
       - name: Environment setup
         run: |
