@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10...3.26)
 
-project(tioj_judge VERSION 0.1 LANGUAGES CXX)
+project(tioj_judge VERSION 2.5.0 LANGUAGES CXX)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 set(SOVERSION 0)
@@ -31,6 +31,7 @@ set(CMAKE_FIND_LIBRARY_SUFFIXES ".a")
 set(TIOJ_DATA_DIR "/var/lib/tioj-judge/" CACHE PATH "Path of default testdata & scoring program location")
 
 add_compile_definitions(TIOJ_DATA_DIR="${TIOJ_DATA_DIR}")
+add_compile_definitions(TIOJ_JUDGE_VERSION="${PROJECT_VERSION}")
 
 # setup dependencies
 execute_process(
