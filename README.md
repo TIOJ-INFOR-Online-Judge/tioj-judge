@@ -67,7 +67,7 @@ RUSTUP_HOME="$HOME/.rustup"
 
 ### Installation
 
-```
+```bash
 cmake -B build -G Ninja
 cmake --build build
 sudo cmake --install build
@@ -77,11 +77,20 @@ This will also install `libtioj` and its dependencies (namely `nlohmann_json` an
 
 ### Usage
 
-Set up the `/etc/tioj-judge.conf` configuration file, and then run `sudo tioj-judge` to start the judge. The configuration file format is as follows:
+First, create a system user to run the judge client, e.g. `tioj-judge`:
 
+```bash
+sudo useradd -r tioj-judge -s /usr/sbin/nologin -d /var/lib/tioj-judge
+printf 'uid = %s\ngid = %s\n' $(id -u tioj-judge) $(id -g tioj-judge) | sudo tee -a /etc/tioj-judge.conf
 ```
+
+Then, set up the `/etc/tioj-judge.conf` configuration file (the `uid` and `gid` should already be set by the above command), and then run `sudo tioj-judge` to start the judge. The configuration file format is as follows:
+
+```ini
 tioj_url = https://url.to.tioj.web.server
 tioj_key = some_random_key
+uid = some_uid
+gid = some_gid
 parallel = 1
 max_rss_per_task_mb = 2048
 max_output_per_task_mb = 1024
