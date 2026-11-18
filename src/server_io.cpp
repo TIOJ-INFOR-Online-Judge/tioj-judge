@@ -203,7 +203,9 @@ class TIOJClient : public WsClient {
   TIOJClient()
       : WsClient("ws" + kTIOJUrl.substr(4) + "/cable?" +
                  httplib::detail::params_to_query_str({{"key", kTIOJKey}, {"version", kVersionCode}})),
-        server_version("3.4.0") {}
+        server_version("3.4.0") {
+    spdlog::info("Judge client version: {}", kVersionCode);
+  }
 
   double last_ping = 0;
   std::string server_version;

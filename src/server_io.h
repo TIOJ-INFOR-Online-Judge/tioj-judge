@@ -4,9 +4,7 @@
 #include <string>
 #include "tioj/submission.h"
 
-#define STRINGIFY(x) #x
-const std::string kVersionCode = STRINGIFY(TIOJ_JUDGE_VERSION);
-#undef STRINGIFY
+const std::string kVersionCode = TIOJ_JUDGE_VERSION;
 extern std::string kTIOJUrl;
 extern std::string kTIOJKey;
 extern size_t kMaxQueue;
